@@ -1,0 +1,23 @@
+[project]
+name = "pointnerf2studio"
+version = "0.0.1"
+
+dependencies=[
+    "kornia",
+    "warmup_scheduler",
+    "inplace_abn",
+    "lpips",
+    "open3d",
+    "torch==1.13.1+cu117",
+    "h5py",
+    "imageio",
+    "scikit-image",
+    "nerfstudio>=0.3.0"
+]
+
+[tool.setuptools.packages.find]
+include = [".*"]
+
+[project.entry-points.'nerfstudio.method_configs']
+pointnerf2studio = '.nerfstudio.studio_config:run_method'
+
