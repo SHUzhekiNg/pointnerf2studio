@@ -11,7 +11,6 @@ from ..helpers.networks import init_seq
 
 from .depth_estimators.mvsnet import MVSNet as Ofcl_MVSNet
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from inplace_abn import InPlaceABN
 from collections import OrderedDict
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from torchvision import transforms as T

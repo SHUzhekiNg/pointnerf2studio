@@ -12,7 +12,7 @@ Migration for **Point-NeRF: Point-based Neural Radiance Fields** to **Nerfstudio
 - Nerfstudio >= 0.3.0
 - CUDA 11.7 or higher.
 
-### Installation Dependences
+### Dependences
 
 Install the dependent libraries as follows:
 
@@ -27,10 +27,12 @@ pip install h5py imageio scikit-image
   https://docs.nerf.studio/en/latest/index.html
 
 - Install torch_scatter following:
+  
   https://github.com/rusty1s/pytorch_scatter
 
-### Installation
+### Install
 ```
 pip install git+https://github.com/SHUzhekiNg/pointnerf2studio
 ```
 
+## 

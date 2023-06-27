@@ -3,7 +3,6 @@ torch.autograd.set_detect_anomaly(True)
 import torch.nn as nn
 from .mvs_utils import *
 from .mvs_utils import homo_warp
-from inplace_abn import InPlaceABN
 from .renderer import run_network_mvs
 from .depth_estimators.mvsnet import MVSNet as Ofcl_MVSNet
 
@@ -690,7 +689,7 @@ def create_mvs(args, mvs_mode=-1, depth=128):
 class ConvBnReLU(nn.Module):
     def __init__(self, in_channels, out_channels,
                  kernel_size=3, stride=1, pad=1,
-                 norm_act=InPlaceABN):
+                 norm_act=nn.BatchNorm2d):
         super(ConvBnReLU, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels,
                               kernel_size, stride=stride, padding=pad, bias=False)
@@ -703,7 +702,7 @@ class ConvBnReLU(nn.Module):
 class ConvBnReLU3D(nn.Module):
     def __init__(self, in_channels, out_channels,
                  kernel_size=3, stride=1, pad=1,
-                 norm_act=InPlaceABN):
+                 norm_act=nn.BatchNorm3d):
         super(ConvBnReLU3D, self).__init__()
         self.conv = nn.Conv3d(in_channels, out_channels,
                               kernel_size, stride=stride, padding=pad, bias=False)
@@ -718,7 +717,7 @@ class FeatureNet(nn.Module):
     """
     output 3 levels of features using a FPN structure
     """
-    def __init__(self, intermediate=False, norm_act=InPlaceABN):
+    def __init__(self, intermediate=False, norm_act=nn.BatchNorm2d):
         super(FeatureNet, self).__init__()
 
         self.conv0 = nn.Sequential(
@@ -765,7 +764,7 @@ class FeatureNet(nn.Module):
 
 
 class CostRegNet(nn.Module):
-    def __init__(self, in_channels, norm_act=InPlaceABN):
+    def __init__(self, in_channels, norm_act=nn.BatchNorm3d):
         super(CostRegNet, self).__init__()
         self.conv0 = ConvBnReLU3D(in_channels, 8, norm_act=norm_act)
 
@@ -811,7 +810,7 @@ class CostRegNet(nn.Module):
         return x
 
 class ProbNet(nn.Module):
-    def __init__(self, in_channels, norm_act=InPlaceABN):
+    def __init__(self, in_channels, norm_act=nn.BatchNorm3d):
         super(ProbNet, self).__init__()
         self.conv0 = ConvBnReLU3D(in_channels, 1, norm_act=norm_act)
 
@@ -825,7 +824,7 @@ class MVSNet(nn.Module):
     def __init__(self,
                  depth=128,
                  num_groups=1,
-                 norm_act=InPlaceABN,
+                 norm_act=nn.BatchNorm3d,
                  levels=1):
         super(MVSNet, self).__init__()
         self.levels = levels  # 3 depth levels

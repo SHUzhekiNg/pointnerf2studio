@@ -5,7 +5,6 @@ version = "0.0.1"
 dependencies=[
     "kornia",
     "warmup_scheduler",
-    "inplace_abn",
     "lpips",
     "open3d",
     "torch==1.13.1+cu117",
