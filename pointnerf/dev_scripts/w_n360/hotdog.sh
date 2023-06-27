@@ -47,11 +47,12 @@ agg_dist_pers=20
 radius_limit_scale=4
 depth_limit_scale=0
 alpha_range=0
+
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
-wcoord_query=1
+ 
 z_depth_dim=400
 max_o=1000000 #2000000
 ranges=" -1.198 -1.286 -0.190  1.198 1.110 0.312 "
@@ -277,7 +278,6 @@ python3 train_ft.py \
         --ranges $ranges \
         --vid $vid \
         --vsize $vsize \
-        --wcoord_query $wcoord_query \
         --max_o $max_o \
         --zero_one_loss_items $zero_one_loss_items \
         --zero_one_loss_weights $zero_one_loss_weights \

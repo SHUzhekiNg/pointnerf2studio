@@ -53,7 +53,7 @@ vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
-wcoord_query=1
+ 
 z_depth_dim=400
 max_o=290000 #2000000
 #ranges=" -1.0345 -0.5172 -0.6727 0.7255 0.4428 0.9273 "
@@ -279,7 +279,6 @@ python3 train_ft.py \
         --ranges $ranges \
         --vid $vid \
         --vsize $vsize \
-        --wcoord_query $wcoord_query \
         --max_o $max_o \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \

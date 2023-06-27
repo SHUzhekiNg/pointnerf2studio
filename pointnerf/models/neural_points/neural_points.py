@@ -215,13 +215,6 @@ class NeuralPoints(nn.Module):
             'vscale is the block size that store several voxels'
         )
         parser.add_argument(
-            '--wcoord_query',
-            type=int,
-            default="0",
-            help=
-            '0 for perspective voxels, and 1 for world coord, -1 for world coord and using pytorch cuda'
-        )
-        parser.add_argument(
             '--ranges',
             type=float,
             nargs='+',

@@ -26,7 +26,7 @@ vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
-wcoord_query=1
+ 
 z_depth_dim=400
 max_o=300000 #2000000
 ranges=" -1.252 -0.910 -0.742 0.767 1.082 1.151 "
@@ -167,6 +167,5 @@ python3 test_ft.py \
         --alpha_range $alpha_range \
         --ranges $ranges \
         --vsize $vsize \
-        --wcoord_query $wcoord_query \
         --max_o $max_o \
         --debug

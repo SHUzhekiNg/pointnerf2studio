@@ -27,7 +27,7 @@ vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.001 0.001 0.001 " #" 0.005 0.005 0.005 "
-wcoord_query=1
+ 
 z_depth_dim=400
 max_o=800000 #2000000
 ranges=" -0.31397 -0.20539 -0.33925 0.26604 0.37462 0.24076 "
@@ -164,7 +164,6 @@ python3 test_ft.py \
         --mvs_img_wh $mvs_img_wh \
         --img_wh $img_wh \
         --vsize $vsize \
-        --wcoord_query $wcoord_query \
         --max_o $max_o \
         --ranges $ranges \
         --debug
