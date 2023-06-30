@@ -1,0 +1,124 @@
+Using /home/zhenglicheng/.cache/torch_extensions/py310_cu117 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/zhenglicheng/.cache/torch_extensions/py310_cu117/query_worldcoords_cuda/build.ninja...
+Building extension module query_worldcoords_cuda...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module query_worldcoords_cuda...
+opt.color_loss_items  ['ray_masked_coarse_raycolor', 'ray_miss_coarse_raycolor', 'coarse_raycolor']
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Debug Mode
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+dataset total: train 100
+dataset [NerfSynthFtDataset] was created
+/home/zhenglicheng/Desktop/bootcamp/pointnerf/checkpoints/nerfsynthchair/*_net_ray_marching.pth
+-----------------------------------Generate Points-----------------------------------
+loading model /home/zhenglicheng/Desktop/bootcamp/pointnerf/checkpoints/MVSNet/model_000014.ckpt
+model [MvsPointsVolumetricModel] was created
+opt.resume_iter!!!!!!!!! best
+loading mvs  from  /home/zhenglicheng/Desktop/bootcamp/pointnerf/checkpoints/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20/best_net_mvs.pth
+------------------- Networks -------------------
+[Network mvs] Total number of parameters: 0.382M
+------------------------------------------------
+  0%|                                                                                                                                                                                        | 0/184 [00:00<?, ?it/s]/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3483.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/functional.py:4236: UserWarning: Default grid_sample and affine_grid behavior has changed to align_corners=False since 1.3.0. Please specify align_corners=True if the old behavior is desired. See the documentation of grid_sample for details.
+  warnings.warn(
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 184/184 [00:56<00:00,  3.26it/s]
+Failed to enable GUI event loop integration for 'qt'
+Traceback (most recent call last):
+  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/matplotlibtools.py", line 30, in do_enable_gui
+    enable_gui(guiname)
+  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 540, in enable_gui
+    return gui_hook(app)
+  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 180, in enable_qt
+    self.enable_qt4(app)
+  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 205, in enable_qt4
+    app, inputhook_qt4 = create_inputhook_qt4(self, app)
+  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhookqt4.py", line 84, in create_inputhook_qt4
+    app = QtGui.QApplication([" "])
+AttributeError: module 'PySide2.QtGui' has no attribute 'QApplication'
+Backend QtAgg is interactive backend. Turning interactive mode on.
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 184/184 [01:22<00:00,  2.23it/s]
+xyz_world_all torch.Size([24141897, 3]) torch.Size([24141897, 1]) torch.Size([24141897])
+%%%%%%%%%%%%%  getattr(dataset, spacemin, None) None
+vishull_mask torch.Size([24141897])
+alpha masking xyz_world_all torch.Size([16156487, 3]) torch.Size([16156487, 1])
+xyz_residual torch.Size([16156487])
+min_idx torch.Size([558541])
+after voxelize: torch.Size([558541, 3]) torch.Size([558541, 1])
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 184/184 [00:17<00:00, 10.49it/s]
+vis
+self.model_names ['mvs']
+opt.act_type!!!!!!!!! LeakyReLU
+querier device cuda:0 0
+no neural points as nn.Parameter
+model [MvsPointsVolumetricModel] was created
+neural_params [('module.neural_points.xyz', torch.Size([558541, 3]), False), ('module.neural_points.points_conf', torch.Size([1, 558541, 1]), True), ('module.neural_points.points_dir', torch.Size([1, 558541, 3]), True), ('module.neural_points.points_color', torch.Size([1, 558541, 3]), True), ('module.neural_points.points_embeding', torch.Size([1, 558541, 32]), True), ('module.neural_points.Rw2c', torch.Size([3, 3]), False)]
+opt.resume_iter!!!!!!!!! best
+loading ray_marching  from  /home/zhenglicheng/Desktop/bootcamp/pointnerf/checkpoints/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20/best_net_ray_marching.pth
+------------------- Networks -------------------
+[Network ray_marching] Total number of parameters: 23.800M
+------------------------------------------------
+# training images = 100
+saving model (chair, epoch 0, total_steps 0)
+End of iteration 40      Number of batches 40    Time taken: 6.28s
+[Average Loss] total: 0.1933289617   ray_masked_coarse_raycolor: 0.1933259517   ray_masked_coarse_raycolor_psnr: 7.2891702652   ray_miss_coarse_raycolor: 0.0000002734   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0435501486   coarse_raycolor_psnr: 13.8981018066   
+End of iteration 80      Number of batches 40    Time taken: 5.37s
+[Average Loss] total: 0.2100454122   ray_masked_coarse_raycolor: 0.2100424021   ray_masked_coarse_raycolor_psnr: 6.9405570030   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0456881411   coarse_raycolor_psnr: 13.6378984451   
+End of iteration 120     Number of batches 40    Time taken: 6.73s
+[Average Loss] total: 0.2033901960   ray_masked_coarse_raycolor: 0.2033872157   ray_masked_coarse_raycolor_psnr: 7.0696496964   ray_miss_coarse_raycolor: 0.0430381075   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0447024591   coarse_raycolor_psnr: 13.7509660721   
+End of iteration 160     Number of batches 40    Time taken: 5.98s
+[Average Loss] total: 0.2020571679   ray_masked_coarse_raycolor: 0.2020541728   ray_masked_coarse_raycolor_psnr: 7.1223192215   ray_miss_coarse_raycolor: 0.0139462519   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0460695699   coarse_raycolor_psnr: 13.6464080811   
+End of iteration 200     Number of batches 40    Time taken: 5.95s
+[Average Loss] total: 0.2029610425   ray_masked_coarse_raycolor: 0.2029580325   ray_masked_coarse_raycolor_psnr: 7.0978150368   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0448155664   coarse_raycolor_psnr: 13.7795934677   
+End of iteration 240     Number of batches 40    Time taken: 6.83s
+[Average Loss] total: 0.1971263736   ray_masked_coarse_raycolor: 0.1971233785   ray_masked_coarse_raycolor_psnr: 7.1998338699   ray_miss_coarse_raycolor: 0.0104640257   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0431912430   coarse_raycolor_psnr: 13.8934087753   
+End of iteration 280     Number of batches 40    Time taken: 5.38s
+[Average Loss] total: 0.2076900750   ray_masked_coarse_raycolor: 0.2076870650   ray_masked_coarse_raycolor_psnr: 6.9832963943   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0467435569   coarse_raycolor_psnr: 13.5899724960   
+End of iteration 320     Number of batches 40    Time taken: 6.60s
+[Average Loss] total: 0.2040704787   ray_masked_coarse_raycolor: 0.2040674537   ray_masked_coarse_raycolor_psnr: 7.0559859276   ray_miss_coarse_raycolor: 0.0027352977   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0444398932   coarse_raycolor_psnr: 13.8028135300   
+End of iteration 360     Number of batches 40    Time taken: 5.74s
+[Average Loss] total: 0.1963384598   ray_masked_coarse_raycolor: 0.1963354200   ray_masked_coarse_raycolor_psnr: 7.2132658958   ray_miss_coarse_raycolor: 0.0007509142   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0437612943   coarse_raycolor_psnr: 13.8267927170   
+End of iteration 400     Number of batches 40    Time taken: 5.41s
+[Average Loss] total: 0.2061454803   ray_masked_coarse_raycolor: 0.2061424702   ray_masked_coarse_raycolor_psnr: 7.0500841141   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0464324206   coarse_raycolor_psnr: 13.6157064438   
+End of iteration 440     Number of batches 40    Time taken: 6.70s
+[Average Loss] total: 0.2178204358   ray_masked_coarse_raycolor: 0.2178174555   ray_masked_coarse_raycolor_psnr: 6.7651429176   ray_miss_coarse_raycolor: 0.0000001456   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0496480502   coarse_raycolor_psnr: 13.2984237671   
+End of iteration 480     Number of batches 40    Time taken: 5.34s
+[Average Loss] total: 0.1900438070   ray_masked_coarse_raycolor: 0.1900408715   ray_masked_coarse_raycolor_psnr: 7.3634848595   ray_miss_coarse_raycolor: 0.0215481222   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0413466133   coarse_raycolor_psnr: 14.1304550171   
+End of iteration 520     Number of batches 40    Time taken: 7.00s
+[Average Loss] total: 0.1905202419   ray_masked_coarse_raycolor: 0.1905172765   ray_masked_coarse_raycolor_psnr: 7.3624238968   ray_miss_coarse_raycolor: 0.0004307795   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0422278047   coarse_raycolor_psnr: 13.9615955353   
+End of iteration 560     Number of batches 40    Time taken: 5.37s
+[Average Loss] total: 0.2131818980   ray_masked_coarse_raycolor: 0.2131788582   ray_masked_coarse_raycolor_psnr: 6.8304734230   ray_miss_coarse_raycolor: 0.0210419055   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0467547737   coarse_raycolor_psnr: 13.5164108276   
+End of iteration 600     Number of batches 40    Time taken: 5.44s
+[Average Loss] total: 0.1978828013   ray_masked_coarse_raycolor: 0.1978797764   ray_masked_coarse_raycolor_psnr: 7.2047128677   ray_miss_coarse_raycolor: 0.0031766703   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0451995097   coarse_raycolor_psnr: 13.7454271317   
+End of iteration 640     Number of batches 40    Time taken: 6.75s
+[Average Loss] total: 0.2001066506   ray_masked_coarse_raycolor: 0.2001036406   ray_masked_coarse_raycolor_psnr: 7.1540460587   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0445590913   coarse_raycolor_psnr: 13.7838153839   
+End of iteration 680     Number of batches 40    Time taken: 5.46s
+[Average Loss] total: 0.1970731169   ray_masked_coarse_raycolor: 0.1970701367   ray_masked_coarse_raycolor_psnr: 7.2183847427   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0432828590   coarse_raycolor_psnr: 13.9187154770   
+End of iteration 720     Number of batches 40    Time taken: 6.98s
+[Average Loss] total: 0.2009844035   ray_masked_coarse_raycolor: 0.2009814084   ray_masked_coarse_raycolor_psnr: 7.1345047951   ray_miss_coarse_raycolor: 0.0000007790   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0450686105   coarse_raycolor_psnr: 13.7292909622   
+End of iteration 760     Number of batches 40    Time taken: 5.40s
+[Average Loss] total: 0.2029082626   ray_masked_coarse_raycolor: 0.2029052526   ray_masked_coarse_raycolor_psnr: 7.1019220352   ray_miss_coarse_raycolor: 0.0022636631   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0444576554   coarse_raycolor_psnr: 13.8171052933   
+End of iteration 800     Number of batches 40    Time taken: 5.40s
+[Average Loss] total: 0.2140323967   ray_masked_coarse_raycolor: 0.2140293866   ray_masked_coarse_raycolor_psnr: 6.8187136650   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0486768484   coarse_raycolor_psnr: 13.3482236862   
+End of iteration 840     Number of batches 40    Time taken: 6.71s
+[Average Loss] total: 0.2150969058   ray_masked_coarse_raycolor: 0.2150938809   ray_masked_coarse_raycolor_psnr: 6.8325295448   ray_miss_coarse_raycolor: 0.0108520342   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0487320200   coarse_raycolor_psnr: 13.3480100632   
+End of iteration 880     Number of batches 40    Time taken: 5.56s
+[Average Loss] total: 0.1961361617   ray_masked_coarse_raycolor: 0.1961331666   ray_masked_coarse_raycolor_psnr: 7.2260727882   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0421897732   coarse_raycolor_psnr: 14.0209398270   
+End of iteration 920     Number of batches 40    Time taken: 6.50s
+[Average Loss] total: 0.1954864711   ray_masked_coarse_raycolor: 0.1954835057   ray_masked_coarse_raycolor_psnr: 7.2619867325   ray_miss_coarse_raycolor: 0.0112396451   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0437131636   coarse_raycolor_psnr: 13.8621444702   
+End of iteration 960     Number of batches 40    Time taken: 5.38s
+[Average Loss] total: 0.2035329789   ray_masked_coarse_raycolor: 0.2035299987   ray_masked_coarse_raycolor_psnr: 7.0793442726   ray_miss_coarse_raycolor: 0.0021774312   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0446643643   coarse_raycolor_psnr: 13.7964324951   
+End of iteration 1000    Number of batches 40    Time taken: 5.40s
+[Average Loss] total: 0.2017282546   ray_masked_coarse_raycolor: 0.2017252296   ray_masked_coarse_raycolor_psnr: 7.1077914238   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0448968820   coarse_raycolor_psnr: 13.7298154831   
+End of iteration 1040    Number of batches 40    Time taken: 6.97s
+[Average Loss] total: 0.2036108971   ray_masked_coarse_raycolor: 0.2036078423   ray_masked_coarse_raycolor_psnr: 7.0592293739   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0460711382   coarse_raycolor_psnr: 13.6362276077   
+End of iteration 1080    Number of batches 40    Time taken: 5.94s
+[Average Loss] total: 0.2074215412   ray_masked_coarse_raycolor: 0.2074184865   ray_masked_coarse_raycolor_psnr: 6.9977478981   ray_miss_coarse_raycolor: 0.0011956332   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0450810343   coarse_raycolor_psnr: 13.7176122665   
+End of iteration 1120    Number of batches 40    Time taken: 7.27s
+[Average Loss] total: 0.1952135414   ray_masked_coarse_raycolor: 0.1952105612   ray_masked_coarse_raycolor_psnr: 7.2769751549   ray_miss_coarse_raycolor: 0.0000000000   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0434911773   coarse_raycolor_psnr: 13.8836641312   
+End of iteration 1160    Number of batches 40    Time taken: 5.53s
+[Average Loss] total: 0.2015002221   ray_masked_coarse_raycolor: 0.2014971972   ray_masked_coarse_raycolor_psnr: 7.1235232353   ray_miss_coarse_raycolor: 0.0105433809   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0459106714   coarse_raycolor_psnr: 13.6552534103   
+End of iteration 1200    Number of batches 40    Time taken: 5.82s
+[Average Loss] total: 0.2007831633   ray_masked_coarse_raycolor: 0.2007801533   ray_masked_coarse_raycolor_psnr: 7.1075501442   ray_miss_coarse_raycolor: 0.0279878955   ray_miss_coarse_raycolor_psnr: inf   coarse_raycolor: 0.0433211848   coarse_raycolor_psnr: 13.9054708481

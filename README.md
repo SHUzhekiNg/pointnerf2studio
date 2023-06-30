@@ -19,12 +19,12 @@ Install the dependent libraries as follows:
 - Install the dependent python libraries:
 
 ```
-pip install h5py imageio scikit-image
+pip install h5py imageio scikit-image plyfile
 ```
 
 - Install Nerfstudio following: 
 
-  https://docs.nerf.studio/en/latest/index.html
+  https://docs.nerf.studio/en/latest/quickstart/installation.html
 
 - Install torch_scatter following:
   

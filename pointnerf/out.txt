@@ -1,0 +1,269 @@
+Using /home/zhenglicheng/.cache/torch_extensions/py310_cu117 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/zhenglicheng/.cache/torch_extensions/py310_cu117/query_worldcoords_cuda/build.ninja...
+Building extension module query_worldcoords_cuda...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+
+ninja: no work to do.
+Loading extension module query_worldcoords_cuda...
+/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/optim/lr_scheduler.py:139: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+
+opt.color_loss_items  ['ray_masked_coarse_raycolor', 'ray_miss_coarse_raycolor', 'coarse_raycolor']
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Debug Mode
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+dataset total: train 100
+dataset [NerfSynthFtDataset] was created
+../../../../pointnerf/checkpoints/nerfsynth/chair/*_net_ray_marching.pth
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Continue training from 200000 epoch
+Iter: 200000
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+opt.act_type!!!!!!!!! LeakyReLU
+self.points_embeding torch.Size([1, 689557, 32])
+querier device cuda:0 0
+neural_params [('module.neural_points.xyz', torch.Size([689557, 3]), False), ('module.neural_points.points_embeding', torch.Size([1, 689557, 32]), True), ('module.neural_points.points_conf', torch.Size([1, 689557, 1]), True), ('module.neural_points.points_dir', torch.Size([1, 689557, 3]), True), ('module.neural_points.points_color', torch.Size([1, 689557, 3]), True), ('module.neural_points.Rw2c', torch.Size([3, 3]), False)]
+model [MvsPointsVolumetricModel] was created
+opt.resume_iter!!!!!!!!! 200000
+loading ray_marching  from  ../../../../pointnerf/checkpoints/nerfsynth/chair/200000_net_ray_marching.pth
+------------------- Networks -------------------
+[Network ray_marching] Total number of parameters: 29.303M
+------------------------------------------------
+# training images = 100
+chair: End of stepts 200000 / 200000 	 Time Taken: 0.10873985290527344 sec
+saving model (chair, epoch 1997, total_steps 200000)
+dataset total: test 200
+dataset [NerfSynthFtDataset] was created
+full datasets test:
+-----------------------------------Testing-----------------------------------
+test set size 200, interval 1
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.0 in 200 cases: time used: 7.349870204925537 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(39.5571, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0007280991994775832, PSNR:31.378093719482422
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0007, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.1 in 200 cases: time used: 6.766450881958008 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(39.5359, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0007246147724799812, PSNR:31.398927688598633
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0007, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.2 in 200 cases: time used: 6.816421985626221 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(39.2368, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0007591047906316817, PSNR:31.19698143005371
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.3 in 200 cases: time used: 6.790184259414673 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(38.8684, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0008071376360021532, PSNR:30.93052101135254
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.4 in 200 cases: time used: 7.569937229156494 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(38.7596, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.000808617623988539, PSNR:30.922565460205078
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.5 in 200 cases: time used: 6.769534111022949 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(38.6268, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0008149087079800665, PSNR:30.88890838623047
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.6 in 200 cases: time used: 6.925886392593384 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(38.7630, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0007737893611192703, PSNR:31.11376953125
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.7 in 200 cases: time used: 6.7280871868133545 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0001, device='cuda:0') tensor(38.5064, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0008063174900598824, PSNR:30.934938430786133
+dict_items([('coarse_raycolor', tensor(0.0001, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.8 in 200 cases: time used: 6.781991481781006 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(38.2379, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.000844107533339411, PSNR:30.736021041870117
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0008, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.9 in 200 cases: time used: 6.6517932415008545 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(37.8707, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0009058592841029167, PSNR:30.429391860961914
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0009, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.10 in 200 cases: time used: 6.674042701721191 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(37.5433, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0009648763807490468, PSNR:30.15528106689453
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0010, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.11 in 200 cases: time used: 6.6680943965911865 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(37.2396, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0010222471319139004, PSNR:29.90443992614746
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0010, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.12 in 200 cases: time used: 6.878042221069336 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(36.7791, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001125998212955892, PSNR:29.484621047973633
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0011, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.13 in 200 cases: time used: 6.809725761413574 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(36.5638, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0011764251394197345, PSNR:29.294355392456055
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0012, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.14 in 200 cases: time used: 6.950373649597168 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(36.1764, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001287151244468987, PSNR:28.903701782226562
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0013, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.15 in 200 cases: time used: 6.784882068634033 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.7972, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001411238918080926, PSNR:28.50399398803711
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.16 in 200 cases: time used: 6.930114984512329 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.4739, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0015305980341508985, PSNR:28.15138816833496
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0015, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.17 in 200 cases: time used: 6.690547704696655 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.3246, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0015963308978825808, PSNR:27.968769073486328
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0016, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.18 in 200 cases: time used: 6.463859796524048 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(34.9391, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0017568954499438405, PSNR:27.552539825439453
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0018, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.19 in 200 cases: time used: 6.739489555358887 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0004, device='cuda:0') tensor(34.0031, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.002193088410422206, PSNR:26.58943748474121
+dict_items([('coarse_raycolor', tensor(0.0004, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0022, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.20 in 200 cases: time used: 6.619874477386475 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.7238, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0014790224377065897, PSNR:28.30025291442871
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0015, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.21 in 200 cases: time used: 6.465601921081543 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0002, device='cuda:0') tensor(36.0606, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001357310451567173, PSNR:28.673206329345703
+dict_items([('coarse_raycolor', tensor(0.0002, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.22 in 200 cases: time used: 7.0384087562561035 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.8821, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013813609257340431, PSNR:28.596927642822266
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.23 in 200 cases: time used: 6.467716932296753 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.6618, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0014080619439482689, PSNR:28.51378059387207
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.24 in 200 cases: time used: 6.546064853668213 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.7207, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001345645752735436, PSNR:28.710689544677734
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0013, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.25 in 200 cases: time used: 6.824970960617065 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.7174, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013031886192038655, PSNR:28.849925994873047
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0013, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.26 in 200 cases: time used: 7.300619125366211 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.3604, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001370262703858316, PSNR:28.631959915161133
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.27 in 200 cases: time used: 7.314726114273071 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.2045, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013792645186185837, PSNR:28.603525161743164
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.28 in 200 cases: time used: 6.861346006393433 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.0690, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013842120533809066, PSNR:28.587974548339844
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.29 in 200 cases: time used: 7.334097146987915 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(35.0156, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013661823468282819, PSNR:28.644912719726562
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.30 in 200 cases: time used: 6.737318515777588 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(34.9801, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0013458675239235163, PSNR:28.70997428894043
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0013, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.31 in 200 cases: time used: 6.760766983032227 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0003, device='cuda:0') tensor(34.8014, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.001373498933389783, PSNR:28.621715545654297
+dict_items([('coarse_raycolor', tensor(0.0003, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0014, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.32 in 200 cases: time used: 6.832951307296753 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor tensor(0.0004, device='cuda:0') tensor(34.3722, device='cuda:0')
+ray_masked_coarse_raycolor loss:0.0014861916424706578, PSNR:28.279251098632812
+dict_items([('coarse_raycolor', tensor(0.0004, device='cuda:0')), ('ray_masked_coarse_raycolor', tensor(0.0015, device='cuda:0'))])
+coarse_raycolor:(800, 800, 3)
+gt_image:torch.Size([640000, 3])
+num.33 in 200 cases: time used: 6.78474235534668 s  at  ../../../../pointnerf/checkpoints/nerfsynth/chair/test_200000/images
+coarse_raycolor 
+
+^[^CTraceback (most recent call last):
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/train_studio.py", line 1082, in <module>
+    main()
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/train_studio.py", line 1030, in main
+    test_psnr = test(model, test_dataset, Visualizer(test_opt), test_opt, test_bg_info, test_steps=total_steps, gen_vid=True, lpips=True)
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/train_studio.py", line 300, in test
+    model.test()
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/../models/mvs_points_volumetric_model.py", line 335, in test
+    self.output = self.run_network_models()
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/../models/neural_points_volumetric_model.py", line 85, in run_network_models
+    return self.fill_invalid(self.net_ray_marching(**self.input), self.input)
+  File "/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/parallel/data_parallel.py", line 169, in forward
+    return self.module(*inputs[0], **kwargs[0])
+  File "/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/../models/neural_points_volumetric_model.py", line 270, in forward
+    decoded_features, ray_valid, weight, conf_coefficient = self.aggregator(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz)
+  File "/home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/../models/aggregators/point_aggregators.py", line 811, in forward
+    output, _ = getattr(self, self.which_agg_model, None)(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight * conf_coefficient, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists)
+  File "/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/run/../models/aggregators/point_aggregators.py", line 561, in viewmlp
+    feat = torch.cat([feat, sampled_color], dim=-1)
+KeyboardInterrupt

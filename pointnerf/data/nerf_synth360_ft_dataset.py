@@ -381,7 +381,7 @@ class NerfSynth360FtDataset(BaseDataset):
         focal = 0.5 * 800 / np.tan(0.5 * self.meta['camera_angle_x'])  # original focal length
         focal *= self.img_wh[0] / 800  # modify focal length to match size self.img_wh
         self.focal = focal
-        # self.near_far = np.array([2.0, 6.0])
+        self.near_far = np.array([2.0, 6.0])
         for vid in list:
             frame = meta['frames'][vid]
             c2w = np.array(frame['transform_matrix']) @ self.blender2opencv

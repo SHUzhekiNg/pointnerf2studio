@@ -65,7 +65,7 @@ def gen_points_filter_embeddings(dataset, visualizer, opt):
     confidence_filtered_all = []
     near_fars_all = []
     gpu_filter = True
-    cpu2gpu= len(dataset.view_id_list) > 300
+    cpu2gpu= False #len(dataset.view_id_list) < 300
 
     imgs_lst, HDWD_lst, c2ws_lst, w2cs_lst, intrinsics_lst = [],[],[],[],[]
     with torch.no_grad():
@@ -102,7 +102,7 @@ def gen_points_filter_embeddings(dataset, visualizer, opt):
         else:
             cam_xyz_all = [cam_xyz_all[i].reshape(-1,3)[points_mask_all[i].reshape(-1),:] for i in range(len(cam_xyz_all))]
             xyz_world_all = [np.matmul(np.concatenate([cam_xyz_all[i], np.ones_like(cam_xyz_all[i][..., 0:1])], axis=-1), np.transpose(np.linalg.inv(extrinsics_all[i][0,...])))[:, :3] for i in range(len(cam_xyz_all))]
-            xyz_world_all, cam_xyz_all, confidence_filtered_all = filter_by_masks.range_mask_lst_np(xyz_world_all, cam_xyz_all, confidence_filtered_all, opt)
+            xyz_world_all, cam_xyz_all, confidence_filtered_all = filter_utils.filter_by_masks.range_mask_lst_np(xyz_world_all, cam_xyz_all, confidence_filtered_all, opt)
             del cam_xyz_all
         # for i in range(len(xyz_world_all)):
         #     visualizer.save_neural_points(i, torch.as_tensor(xyz_world_all[i], device="cuda", dtype=torch.float32), None, data, save_ref=opt.load_points==0)
@@ -171,7 +171,6 @@ def masking(mask, firstdim_lst, seconddim_lst):
     first_lst = [item[mask, ...] if item is not None else None for item in firstdim_lst]
     second_lst = [item[:, mask, ...] if item is not None else None for item in seconddim_lst]
     return first_lst, second_lst
-
 
 
 def render_vid(model, dataset, visualizer, opt, bg_info, steps=0, gen_vid=True):
@@ -246,7 +245,6 @@ def render_vid(model, dataset, visualizer, opt, bg_info, steps=0, gen_vid=True):
         print('--------------------------------Finish generating vid--------------------------------')
 
     return
-
 
 
 def test(model, dataset, visualizer, opt, bg_info, test_steps=0, gen_vid=False, lpips=True):
@@ -529,6 +527,7 @@ def probe_hole(model, dataset, visualizer, opt, bg_info, test_steps=0, opacity_t
 
     return add_xyz, add_embedding, add_color, add_dir, add_conf
 
+
 def bloat_inds(inds, shift, height, width):
     inds = inds[:,None,:]
     sx, sy = torch.meshgrid(torch.arange(-shift, shift+1, dtype=torch.long), torch.arange(-shift, shift+1, dtype=torch.long))
@@ -538,6 +537,7 @@ def bloat_inds(inds, shift, height, width):
     inds[...,0] = torch.clamp(inds[...,0], min=0, max=height-1)
     inds[...,1] = torch.clamp(inds[...,1], min=0, max=width-1)
     return inds
+
 
 def get_latest_epoch(resume_dir):
     os.makedirs(resume_dir, exist_ok=True)
@@ -574,6 +574,7 @@ def create_all_bg(dataset, model, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, H
         bg_ray_lst.append(bg_ray)
     dataset.opt.random_sample = random_sample
     return bg_ray_lst
+
 
 def main():
     torch.backends.cudnn.benchmark = True
