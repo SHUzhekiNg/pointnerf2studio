@@ -935,7 +935,7 @@ def main():
                     xyz_world_sect_plane = mvs_utils.gen_bg_points(model.input)
                     bg_ray, fg_masks = model.set_bg(xyz_world_sect_plane, img_lst, c2ws_lst, w2cs_lst, intrinsics_all, HDWD_lst, fg_masks=fg_masks)
                 data["bg_ray"] = bg_ray
-            model.optimize_parameters(total_steps=total_steps)
+            model.optimize_parameters(total_steps=total_steps)  # training.
 
             losses = model.get_current_losses()
             visualizer.accumulate_losses(losses)

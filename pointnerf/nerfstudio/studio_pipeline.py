@@ -1,6 +1,6 @@
 import typing
 
-from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
+from ..data.studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
 from nerfstudio.pipelines.base_pipeline import (
     DDP,
     Model,
@@ -24,7 +24,7 @@ class PointNerfPipeline(VanillaPipeline):
         Pipeline.__init__(self)
         self.config = config
         self.test_mode = test_mode
-        self.datamanager: VanillaDataManager = config.datamanager.setup(
+        self.datamanager: PointNerfDataManager = config.datamanager.setup(
             device=device,
             test_mode=test_mode,
             world_size=world_size,

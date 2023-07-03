@@ -25,20 +25,6 @@ loading mvs  from  /home/zhenglicheng/Desktop/bootcamp/pointnerf/checkpoints/ini
 /home/zhenglicheng/.local/lib/python3.10/site-packages/torch/nn/functional.py:4236: UserWarning: Default grid_sample and affine_grid behavior has changed to align_corners=False since 1.3.0. Please specify align_corners=True if the old behavior is desired. See the documentation of grid_sample for details.
   warnings.warn(
 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 184/184 [00:56<00:00,  3.26it/s]
-Failed to enable GUI event loop integration for 'qt'
-Traceback (most recent call last):
-  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/matplotlibtools.py", line 30, in do_enable_gui
-    enable_gui(guiname)
-  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 540, in enable_gui
-    return gui_hook(app)
-  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 180, in enable_qt
-    self.enable_qt4(app)
-  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhook.py", line 205, in enable_qt4
-    app, inputhook_qt4 = create_inputhook_qt4(self, app)
-  File "/home/zhenglicheng/.vscode/extensions/ms-python.python-2023.10.1/pythonFiles/lib/python/debugpy/_vendored/pydevd/pydev_ipython/inputhookqt4.py", line 84, in create_inputhook_qt4
-    app = QtGui.QApplication([" "])
-AttributeError: module 'PySide2.QtGui' has no attribute 'QApplication'
-Backend QtAgg is interactive backend. Turning interactive mode on.
 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 184/184 [01:22<00:00,  2.23it/s]
 xyz_world_all torch.Size([24141897, 3]) torch.Size([24141897, 1]) torch.Size([24141897])
 %%%%%%%%%%%%%  getattr(dataset, spacemin, None) None

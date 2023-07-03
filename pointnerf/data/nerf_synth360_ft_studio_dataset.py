@@ -141,27 +141,22 @@ class NerfSynth360FtDataset(BaseDataset):
             self.bg_color = 'random'
         else:
             self.bg_color = [float(one) for one in self.opt.bg_color.split(",")]
-        
-        self.transform = T.ToTensor()  # class 'torchvision.transforms.transforms.ToTensor'
+        self.transform = T.ToTensor()
 
         meta_split = "train" if self.split == "render" else self.split
         with open(os.path.join(self.data_dir, self.scan, f'transforms_{meta_split}.json'), 'r') as f:
-            self.meta = json.load(f)  # Rotation and Transform matrix from .json.
+            self.meta = json.load(f)
         with open(os.path.join(self.data_dir, self.scan, f'transforms_test.json'), 'r') as f:
             self.testmeta = json.load(f)
-        
         self.id_list = [i for i in range(len(self.meta["frames"]))]
         self.test_id_list = [i for i in range(len(self.testmeta["frames"]))]
         self.norm_w2c, self.norm_c2w = torch.eye(4, device="cuda", dtype=torch.float32), torch.eye(4, device="cuda", dtype=torch.float32)
-
         if opt.normview > 0:
             _, _ , w2cs, c2ws = self.build_proj_mats(list=self.test_id_list)
             norm_w2c, norm_c2w = self.normalize_cam(w2cs, c2ws)
         if opt.normview >= 2:
             self.norm_w2c, self.norm_c2w = torch.as_tensor(norm_w2c, device="cuda", dtype=torch.float32), torch.as_tensor(norm_c2w, device="cuda", dtype=torch.float32)
             norm_w2c, norm_c2w = None, None
-
-        # build project matrixs, intrinsics, w2c & c2w matrixs.
         self.proj_mats, self.intrinsics, self.world2cams, self.cam2worlds = self.build_proj_mats(norm_w2c=norm_w2c, norm_c2w=norm_c2w)
         if self.split != "render":
             self.build_init_metas()
@@ -405,7 +400,7 @@ class NerfSynth360FtDataset(BaseDataset):
         proj_mats, intrinsics = np.stack(proj_mats), np.stack(intrinsics)
         world2cams, cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
         return proj_mats, intrinsics, world2cams, cam2worlds
-        
+
 
     def read_meta(self):
 
@@ -430,10 +425,10 @@ class NerfSynth360FtDataset(BaseDataset):
             img = Image.open(image_path)
             img = img.resize(self.img_wh, Image.Resampling.LANCZOS)
             img = self.transform(img)  # (4, h, w)
-            self.depths += [(img[-1:, ...] > 0.1).numpy().astype(np.float32)]
+            self.depths += [(img[-1:, ...] > 0.1).numpy().astype(np.float32)]  #
 
-            self.mvsimgs += [img[:3] * img[-1:]]
-            self.render_gtimgs += [img[:3] * img[-1:] + (1 - img[-1:])]
+            self.mvsimgs += [img[:3] * img[-1:]]  #
+            self.render_gtimgs += [img[:3] * img[-1:] + (1 - img[-1:])]  #
 
             if self.opt.bg_filtering:
                 self.alphas += [
@@ -459,7 +454,7 @@ class NerfSynth360FtDataset(BaseDataset):
 
 
     def name(self):
-        return 'NerfSynthFtDataset'
+        return 'NerfSynthFtStudioDataset'
 
 
     def __del__(self):
