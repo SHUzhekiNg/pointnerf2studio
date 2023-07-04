@@ -36,7 +36,7 @@ def save_image(img_array, filepath):
     Image.fromarray(img_array).save(filepath)
 
 
-def nearest_view(campos, raydir, xyz, id_list):
+def nearest_view(campos, raydir, xyz):
     cam_ind = torch.zeros([0,1], device=campos.device, dtype=torch.long)
     step=10000
     for i in range(0, len(xyz), step):
@@ -649,29 +649,30 @@ def main():
             model.eval()
             if load_points in [1,3]:
                 points_xyz_all = train_dataset.load_init_points()
-            if load_points == 2:
-                points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
-            if load_points == 3:
-                depth_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=80)
-                print("points_xyz_all",points_xyz_all.shape)
-                print("depth_xyz_all", depth_xyz_all.shape)
-                filter_res = 100
-                pc_grid_id, _, pc_space_min, pc_space_max = mvs_utils.construct_vox_points_ind(points_xyz_all, filter_res)
-                d_grid_id, depth_inds, _, _ = mvs_utils.construct_vox_points_ind(depth_xyz_all, filter_res, space_min=pc_space_min, space_max=pc_space_max)
-                all_grid= torch.cat([pc_grid_id, d_grid_id], dim=0)
-                min_id = torch.min(all_grid, dim=-2)[0]
-                max_id = torch.max(all_grid, dim=-2)[0] - min_id
-                max_id_lst = (max_id+1).cpu().numpy().tolist()
-                mask = torch.ones(max_id_lst, device=d_grid_id.device)
-                pc_maskgrid_id = (pc_grid_id - min_id[None,...]).to(torch.long)
-                mask[pc_maskgrid_id[...,0], pc_maskgrid_id[...,1], pc_maskgrid_id[...,2]] = 0
-                depth_maskinds = (d_grid_id[depth_inds,:] - min_id).to(torch.long)
-                depth_maskinds = mask[depth_maskinds[...,0], depth_maskinds[...,1], depth_maskinds[...,2]]
-                depth_xyz_all = depth_xyz_all[depth_maskinds > 0]
-                visualizer.save_neural_points("dep_filtered", depth_xyz_all, None, None, save_ref=False)
-                print("vis depth; after pc mask depth_xyz_all",depth_xyz_all.shape)
-                points_xyz_all = [points_xyz_all, depth_xyz_all] if opt.vox_res > 0 else torch.cat([points_xyz_all, depth_xyz_all],dim=0)
-                del depth_xyz_all, depth_maskinds, mask, pc_maskgrid_id, max_id_lst, max_id, min_id, all_grid
+            # # SCANNET
+            # if load_points == 2:
+            #     points_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=100)
+            # if load_points == 3:
+            #     depth_xyz_all = train_dataset.load_init_depth_points(device="cuda", vox_res=80)
+            #     print("points_xyz_all",points_xyz_all.shape)
+            #     print("depth_xyz_all", depth_xyz_all.shape)
+            #     filter_res = 100
+            #     pc_grid_id, _, pc_space_min, pc_space_max = mvs_utils.construct_vox_points_ind(points_xyz_all, filter_res)
+            #     d_grid_id, depth_inds, _, _ = mvs_utils.construct_vox_points_ind(depth_xyz_all, filter_res, space_min=pc_space_min, space_max=pc_space_max)
+            #     all_grid= torch.cat([pc_grid_id, d_grid_id], dim=0)
+            #     min_id = torch.min(all_grid, dim=-2)[0]
+            #     max_id = torch.max(all_grid, dim=-2)[0] - min_id
+            #     max_id_lst = (max_id+1).cpu().numpy().tolist()
+            #     mask = torch.ones(max_id_lst, device=d_grid_id.device)
+            #     pc_maskgrid_id = (pc_grid_id - min_id[None,...]).to(torch.long)
+            #     mask[pc_maskgrid_id[...,0], pc_maskgrid_id[...,1], pc_maskgrid_id[...,2]] = 0
+            #     depth_maskinds = (d_grid_id[depth_inds,:] - min_id).to(torch.long)
+            #     depth_maskinds = mask[depth_maskinds[...,0], depth_maskinds[...,1], depth_maskinds[...,2]]
+            #     depth_xyz_all = depth_xyz_all[depth_maskinds > 0]
+            #     visualizer.save_neural_points("dep_filtered", depth_xyz_all, None, None, save_ref=False)
+            #     print("vis depth; after pc mask depth_xyz_all",depth_xyz_all.shape)
+            #     points_xyz_all = [points_xyz_all, depth_xyz_all] if opt.vox_res > 0 else torch.cat([points_xyz_all, depth_xyz_all],dim=0)
+            #     del depth_xyz_all, depth_maskinds, mask, pc_maskgrid_id, max_id_lst, max_id, min_id, all_grid
 
             if opt.ranges[0] > -99.0:
                 ranges = torch.as_tensor(opt.ranges, device=points_xyz_all.device, dtype=torch.float32)
@@ -705,7 +706,7 @@ def main():
                 points_xyz_all = points_xyz_all[inds, ...]
 
             campos, camdir = train_dataset.get_campos_ray()
-            cam_ind = nearest_view(campos, camdir, points_xyz_all, train_dataset.id_list)
+            cam_ind = nearest_view(campos, camdir, points_xyz_all)
             unique_cam_ind = torch.unique(cam_ind)
             print("unique_cam_ind", unique_cam_ind.shape)
             points_xyz_all = [points_xyz_all[cam_ind[:,0]==unique_cam_ind[i], :] for i in range(len(unique_cam_ind))]
@@ -817,7 +818,7 @@ def main():
             model.train()
             exit()
 
-    if total_steps == 0 and (len(train_dataset.id_list) > 30 or len(train_dataset.view_id_list)  > 30):
+    if total_steps == 0 and (train_dataset.split_len > 30 or len(train_dataset.view_id_list)  > 30):
         other_states = {
             'epoch_count': 0,
             'total_steps': total_steps,

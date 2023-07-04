@@ -34,24 +34,6 @@ FLIP_Z = np.asarray([
     [0,0,-1],
 ], dtype=np.float32)
 
-def colorjitter(img, factor):
-    # brightness_factor,contrast_factor,saturation_factor,hue_factor
-    # img = F.adjust_brightness(img, factor[0])
-    # img = F.adjust_contrast(img, factor[1])
-    img = F.adjust_saturation(img, factor[2])
-    img = F.adjust_hue(img, factor[3]-1.0)
-
-    return img
-
-
-def pose_spherical(theta, phi, radius):
-    c2w = trans_t(radius)
-    c2w = rot_phi(phi/180.*np.pi) @ c2w
-    c2w = rot_theta(theta/180.*np.pi) @ c2w
-    c2w = np.array([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]]) @ c2w
-    c2w = c2w #@ np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-    return c2w
-
 trans_t = lambda t : np.asarray([
     [1,0,0,0],
     [0,1,0,0],
@@ -74,51 +56,24 @@ rot_theta = lambda th : np.asarray([
 ], dtype=np.float32)
 
 
-
-def get_rays(directions, c2w):
-    """
-    Get ray origin and normalized directions in world coordinate for all pixels in one image.
-    Reference: https://www.scratchapixel.com/lessons/3d-basic-rendering/
-               ray-tracing-generating-camera-rays/standard-coordinate-systems
-    Inputs:
-        directions: (H, W, 3) precomputed ray directions in camera coordinate
-        c2w: (3, 4) transformation matrix from camera coordinate to world coordinate
-    Outputs:
-        rays_o: (H*W, 3), the origin of the rays in world coordinate
-        rays_d: (H*W, 3), the normalized direction of the rays in world coordinate
-    """
-    # Rotate ray directions from camera coordinate to the world coordinate
-    c2w = torch.FloatTensor(c2w)
-    rays_d = directions @ c2w[:3, :3].T  # (H, W, 3)
-    # rays_d = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
-    # The origin of all rays is the camera origin in world coordinate
-    rays_o = c2w[:3, 3].expand(rays_d.shape)  # (H, W, 3)
-
-    rays_d = rays_d.view(-1, 3)
-    rays_o = rays_o.view(-1, 3)
-
-    return rays_o, rays_d
+def colorjitter(img, factor):
+    # brightness_factor,contrast_factor,saturation_factor,hue_factor
+    # img = F.adjust_brightness(img, factor[0])
+    # img = F.adjust_contrast(img, factor[1])
+    img = F.adjust_saturation(img, factor[2])
+    img = F.adjust_hue(img, factor[3]-1.0)
+    return img
 
 
-def get_ray_directions(H, W, focal, center=None):
-    """
-    Get ray directions for all pixels in camera coordinate.
-    Reference: https://www.scratchapixel.com/lessons/3d-basic-rendering/
-               ray-tracing-generating-camera-rays/standard-coordinate-systems
-    Inputs:
-        H, W, focal: image height, width and focal length
-    Outputs:
-        directions: (H, W, 3), the direction of the rays in camera coordinate
-    """
-    grid = create_meshgrid(H, W, normalized_coordinates=False)[0]
-    i, j = grid.unbind(-1)
-    # the direction here is without +0.5 pixel centering as calibration is not so accurate
-    # see https://github.com/bmild/nerf/issues/24
-    cent = center if center is not None else [W / 2, H / 2]
-    directions = torch.stack([(i - cent[0]) / focal[0], (j - cent[1]) / focal[1], torch.ones_like(i)],
-                             -1)  # (H, W, 3)
+def pose_spherical(theta, phi, radius):
+    c2w = trans_t(radius)
+    c2w = rot_phi(phi/180.*np.pi) @ c2w
+    c2w = rot_theta(theta/180.*np.pi) @ c2w
+    c2w = np.array([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]]) @ c2w
+    c2w = c2w #@ np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    return c2w
 
-    return directions
+
 
 class NerfSynth360FtStudioDataset(BaseDataset):
 
@@ -130,7 +85,7 @@ class NerfSynth360FtStudioDataset(BaseDataset):
 
         self.img_wh = (int(800 * downSample), int(800 * downSample))
         self.downSample = downSample
-
+        self.near_far = np.array([2.0, 6.0])
         self.scale_factor = 1.0 / 1.0
         self.max_len = max_len
 
@@ -150,22 +105,18 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         studio_dataset_path = Path(os.path.join(self.data_dir,self.scan))
         self.dataparser_cfg = BlenderDataParserConfig(data=studio_dataset_path, alpha_color=self.opt.bg_color)
         self.dataparser = Blender(config=self.dataparser_cfg)
-        self.studio_output = self.dataparser.get_dataparser_outputs(split=self.split)
+        self.output_split = self.dataparser.get_dataparser_outputs(split=self.opt.split)
+        self.output_test = self.dataparser.get_dataparser_outputs(split="test")
 
-
-
-        meta_split = "train" if self.split == "render" else self.split
-        with open(os.path.join(self.data_dir, self.scan, f'transforms_{meta_split}.json'), 'r') as f:
-            self.meta = json.load(f)
-        with open(os.path.join(self.data_dir, self.scan, f'transforms_test.json'), 'r') as f:
-            self.testmeta = json.load(f)
-        self.train_len = len(self.meta["frames"])
-        self.test_len = len(self.testmeta["frames"])
+        self.split_len = len(self.output_split.image_filenames)  # self.meta["frames"]
+        self.test_len = len(self.output_test.image_filenames)
         
         self.norm_w2c, self.norm_c2w = torch.eye(4, device="cuda", dtype=torch.float32), torch.eye(4, device="cuda", dtype=torch.float32)
         if opt.normview > 0:
-            _, _ , w2cs, c2ws = self.build_proj_mats_studio(list=self.test_id_list)
-            norm_w2c, norm_c2w = self.normalize_cam(w2cs, c2ws)
+            index = 0  # ?why, reffering to line310 in origin nerf_synth360_ft_dataset.py
+            c2w = self.output_split.cameras.camera_to_worlds[index] @ self.blender2opencv @ np.eye(4)
+            norm_c2w = torch.cat((c2w,torch.tensor([[0, 0, 0, 1]], dtype=torch.float64)), dim=0)
+            norm_w2c = np.linalg.inv(c2w)
         if opt.normview >= 2:
             self.norm_w2c, self.norm_c2w = torch.as_tensor(norm_w2c, device="cuda", dtype=torch.float32), torch.as_tensor(norm_c2w, device="cuda", dtype=torch.float32)
             norm_w2c, norm_c2w = None, None
@@ -173,17 +124,13 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         if self.split != "render":
             self.build_init_metas()
             self.read_meta()
-            self.total = len(self.id_list)
+            self.total = self.split_len
             print("dataset total:", self.split, self.total)
         else:
             self.get_render_poses()
             print("render only, pose total:", self.total)
 
-    def get_render_poses(self):
-        stride = 20 #self.opt.render_stride
-        radius = 4 #self.opt.render_radius
-        self.render_poses = np.stack([pose_spherical(angle, -30.0, radius) @ self.blender2opencv for angle in np.linspace(-180, 180, stride + 1)[:-1]], 0)
-        self.total = len(self.render_poses)
+
 
     @staticmethod
     def modify_commandline_options(parser, is_train):
@@ -302,51 +249,15 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         return parser
 
 
-    def normalize_cam(self, w2cs, c2ws):
-        # cam_xyz = c2ws[..., :3, 3]
-        # rtp = self.bcart2sphere(cam_xyz)
-        # print(rtp.shape)
-        # rtp = np.mean(rtp, axis=0)
-        # avg_xyz = self.sphere2cart(rtp)
-        # euler_lst = []
-        # for i in range(len(c2ws)):
-        #     euler_angles = self.matrix2euler(c2ws[i][:3,:3])
-        #     print("euler_angles", euler_angles)
-        #     euler_lst += [euler_angles]
-        # euler = np.mean(np.stack(euler_lst, axis=0), axis=0)
-        # print("euler mean ",euler)
-        # M = self.euler2matrix(euler)
-        # norm_c2w = np.eye(4)
-        # norm_c2w[:3,:3] = M
-        # norm_c2w[:3,3] = avg_xyz
-        # norm_w2c = np.linalg.inv(norm_c2w)
-        # return norm_w2c, norm_c2w
-        index = 0
-        return w2cs[index], c2ws[index]
-
-
-    def get_campos_ray(self):
-        centerpixel = np.asarray(self.img_wh).astype(np.float32)[None, :] // 2
-        camposes = []
-        centerdirs = []
-        for i, idx in enumerate(self.id_list):
-            c2w = self.cam2worlds[i].astype(np.float32)
-            campos = c2w[:3, 3]
-            camrot = c2w[:3, :3]
-            raydir = get_dtu_raydir(centerpixel, self.intrinsics[0].astype(np.float32), camrot, True)
-            camposes.append(campos)
-            centerdirs.append(raydir)
-        camposes = np.stack(camposes, axis=0)  # 2091, 3
-        centerdirs = np.concatenate(centerdirs, axis=0)  # 2091, 3
-        # print("camposes", camposes.shape, centerdirs.shape)
-        return torch.as_tensor(camposes, device="cuda", dtype=torch.float32), torch.as_tensor(centerdirs, device="cuda",
-                                                                                              dtype=torch.float32)
-
-
     def build_init_metas(self):
         self.view_id_list = []
         cam_xyz_lst = [c2w[:3,3] for c2w in self.cam2worlds]
-        _, _, w2cs, c2ws = self.build_proj_mats(meta=self.testmeta, list=self.test_id_list)
+        c2ws = []
+        for vid in range(0, self.test_len):  # get c2ws
+            c2w = self.output_test.cameras.camera_to_worlds[vid] @ self.blender2opencv @ np.eye(4)
+            c2w = torch.cat((c2w,torch.tensor([[0, 0, 0, 1]], dtype=torch.float64)), dim=0)
+            c2ws.append(c2w)
+        c2ws = np.stack(c2ws)
         test_cam_xyz_lst = [c2w[:3,3] for c2w in c2ws]
 
         if self.split=="train":
@@ -360,6 +271,71 @@ class NerfSynth360FtStudioDataset(BaseDataset):
                         str_lst = line.rstrip().split(',')
                         src_views = [int(x) for x in str_lst]
                         self.view_id_list.append(src_views)
+
+
+    def build_proj_mats_studio(self, norm_w2c=None, norm_c2w=None):
+        proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
+
+        for vid in range(0, self.split_len):
+            c2w = self.output_split.cameras.camera_to_worlds[vid] @ self.blender2opencv @ np.eye(4)
+            c2w = torch.cat((c2w,torch.tensor([[0, 0, 0, 1]], dtype=torch.float64)), dim=0)  # append a roll, regarding to src.
+            if norm_w2c is not None:
+                c2w = norm_w2c @ c2w
+            w2c = np.linalg.inv(c2w)
+            cam2worlds.append(c2w)
+            world2cams.append(w2c)
+
+            fx_ls = self.output_split.cameras.fx[vid].numpy()
+            fy_ls = self.output_split.cameras.fy[vid].numpy()
+            self.fx, self.fy = float(fx_ls[0]), float(fy_ls[0])  # ambiguity exists, regard to src anyway.
+
+            intrinsic = np.array([[self.fx, 0, self.width / 2], [0, self.fy, self.height / 2], [0, 0, 1]])
+            intrinsics.append(intrinsic.copy().astype(np.float32))
+
+            # multiply intrinsics and extrinsics to get projection matrix
+            proj_mat_l = np.eye(4)
+            intrinsic[:2] = intrinsic[:2] / 4
+            proj_mat_l[:3, :4] = intrinsic @ w2c[:3, :4]
+            proj_mats += [proj_mat_l]
+
+        proj_mats, intrinsics = np.stack(proj_mats), np.stack(intrinsics)
+        world2cams, cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
+        return proj_mats, intrinsics, world2cams, cam2worlds
+
+
+    def get_campos_ray(self):
+        centerpixel = np.asarray(self.img_wh).astype(np.float32)[None, :] // 2
+        camposes = []
+        centerdirs = []
+        for i in range(0, self.train_len):
+            c2w = self.cam2worlds[i].astype(np.float32)
+            campos = c2w[:3, 3]
+            camrot = c2w[:3, :3]
+            raydir = get_dtu_raydir(centerpixel, self.intrinsics[0].astype(np.float32), camrot, True)
+            camposes.append(campos)
+            centerdirs.append(raydir)
+        camposes = np.stack(camposes, axis=0)  # 2091, 3
+        centerdirs = np.concatenate(centerdirs, axis=0)  # 2091, 3
+        # print("camposes", camposes.shape, centerdirs.shape)
+        return torch.as_tensor(camposes, device="cuda", dtype=torch.float32),\
+               torch.as_tensor(centerdirs, device="cuda", dtype=torch.float32)
+
+
+    def get_ray_directions(self, H, W, center=None):
+        grid = create_meshgrid(H, W, normalized_coordinates=False)[0]
+        i, j = grid.unbind(-1)
+        cent = center if center is not None else [W / 2, H / 2]
+        directions = torch.stack([(i - cent[0]) / self.fx, \
+                                  (j - cent[1]) / self.fy, \
+                                  torch.ones_like(i)], -1)
+        return directions
+
+
+    def get_render_poses(self):
+        stride = 20 #self.opt.render_stride
+        radius = 4 #self.opt.render_radius
+        self.render_poses = np.stack([pose_spherical(angle, -30.0, radius) @ self.blender2opencv for angle in np.linspace(-180, 180, stride + 1)[:-1]], 0)
+        self.total = len(self.render_poses)
 
 
     def load_init_points(self):
@@ -381,73 +357,8 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         # np.savetxt("/home/xharlie/user_space/codes/testNr/checkpoints/pcolallship360_load_confcolordir_KNN8_LRelu_grid320_333_agg2_prl2e3_prune1e4/points/save.txt", points_xyz.cpu().numpy(), delimiter=";")
         return points_xyz
 
-    def build_proj_mats_studio(self, meta=None, list=None, norm_w2c=None, norm_c2w=None):
-        proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
-        list = self.id_list if list is None else list
-        meta = self.meta if meta is None else meta
-        
-        # focal *= self.img_wh[0] / 800  # modify focal length to match size self.img_wh
-        # self.focal = focal
-        self.near_far = np.array([2.0, 6.0])
-        for vid in list:
-            fx_ls = self.studio_output.cameras.fx[vid].numpy()
-            fy_ls = self.studio_output.cameras.fy[vid].numpy()
-            fx, fy = float(fx_ls[0]), float(fy_ls[0])
-
-            frame = meta['frames'][vid]
-            c2w = np.array(frame['transform_matrix']) @ self.blender2opencv
-            if norm_w2c is not None:
-                c2w = norm_w2c @ c2w
-            w2c = np.linalg.inv(c2w)
-            cam2worlds.append(c2w)
-            world2cams.append(w2c)
-
-            intrinsic = np.array([[fx, 0, self.width / 2], [0, fy, self.height / 2], [0, 0, 1]])
-            intrinsics.append(intrinsic.copy().astype(np.float32))
-
-            # multiply intrinsics and extrinsics to get projection matrix
-            proj_mat_l = np.eye(4)
-            intrinsic[:2] = intrinsic[:2] / 4
-            proj_mat_l[:3, :4] = intrinsic @ w2c[:3, :4]
-            proj_mats += [proj_mat_l]
-
-        proj_mats, intrinsics = np.stack(proj_mats), np.stack(intrinsics)
-        world2cams, cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
-        return proj_mats, intrinsics, world2cams, cam2worlds
-
-    def build_proj_mats(self, meta=None, list=None, norm_w2c=None, norm_c2w=None):
-        proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
-        list = self.id_list if list is None else list
-        meta = self.meta if meta is None else meta
-        focal = 0.5 * 800 / np.tan(0.5 * self.meta['camera_angle_x'])  # original focal length
-        focal *= self.img_wh[0] / 800  # modify focal length to match size self.img_wh
-        self.focal = focal
-        self.near_far = np.array([2.0, 6.0])
-        for vid in list:
-            frame = meta['frames'][vid]
-            c2w = np.array(frame['transform_matrix']) @ self.blender2opencv
-            if norm_w2c is not None:
-                c2w = norm_w2c @ c2w
-            w2c = np.linalg.inv(c2w)
-            cam2worlds.append(c2w)
-            world2cams.append(w2c)
-
-            intrinsic = np.array([[focal, 0, self.width / 2], [0, focal, self.height / 2], [0, 0, 1]])
-            intrinsics.append(intrinsic.copy().astype(np.float32))
-
-            # multiply intrinsics and extrinsics to get projection matrix
-            proj_mat_l = np.eye(4)
-            intrinsic[:2] = intrinsic[:2] / 4
-            proj_mat_l[:3, :4] = intrinsic @ w2c[:3, :4]
-            proj_mats += [proj_mat_l]
-
-        proj_mats, intrinsics = np.stack(proj_mats), np.stack(intrinsics)
-        world2cams, cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
-        return proj_mats, intrinsics, world2cams, cam2worlds
-
 
     def read_meta(self):
-
         w, h = self.img_wh
         self.image_paths = []
         self.poses = []
@@ -458,13 +369,10 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         self.alphas = []
 
         self.view_id_dict = {}
-        self.directions = get_ray_directions(h, w, [self.focal, self.focal])  # (h, w, 3)
+        self.directions = self.get_ray_directions(h,w)  # (h, w, 3)
 
-        count = 0
-        for i, idx in enumerate(self.id_list):
-            frame = self.meta['frames'][idx]
-
-            image_path = os.path.join(self.data_dir, self.scan, f"{frame['file_path']}.png")
+        for i in range(self.split_len):
+            image_path = self.output_split.image_filenames[i]
             self.image_paths += [image_path]
             img = Image.open(image_path)
             img = img.resize(self.img_wh, Image.Resampling.LANCZOS)
@@ -487,22 +395,9 @@ class NerfSynth360FtStudioDataset(BaseDataset):
             # self.all_rays += [torch.cat([rays_o, rays_d,
             #                              self.near_far[0] * torch.ones_like(rays_o[:, :1]),
             #                              self.near_far[1] * torch.ones_like(rays_o[:, :1])], 1)]  # (h*w, 8)
-            self.view_id_dict[idx] = i
+            self.view_id_dict[i] = i
         self.poses = self.cam2worlds
 
-
-    def __len__(self):
-        if self.split == 'train':
-            return len(self.id_list) if self.max_len <= 0 else self.max_len
-        return len(self.id_list) if self.max_len <= 0 else self.max_len
-
-
-    def name(self):
-        return 'NerfSynthFtStudioDataset'
-
-
-    def __del__(self):
-        print("end loading")
 
     def normalize_rgb(self, data):
         # to unnormalize image for visualization
@@ -511,6 +406,7 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
         return (data - mean) / std
+
 
     def get_init_item(self, idx, crop=False):
         sample = {}
@@ -587,7 +483,6 @@ class NerfSynth360FtStudioDataset(BaseDataset):
                     sample[key] = value.unsqueeze(0)
 
         return sample
-
 
 
     def __getitem__(self, id, crop=False, full_img=False):
@@ -682,7 +577,6 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         return item
 
 
-
     def get_item(self, idx, crop=False, full_img=False):
         item = self.__getitem__(idx, crop=crop, full_img=full_img)
 
@@ -694,24 +588,20 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         return item
 
 
-
     def get_dummyrot_item(self, idx, crop=False):
-
         item = {}
         width, height = self.width, self.height
 
         transform_matrix = self.render_poses[idx]
         camrot = transform_matrix[0:3, 0:3]
         campos = transform_matrix[0:3, 3]
-        focal = self.focal
+        focal = self.fx
 
         item["focal"] = focal
         item["campos"] = torch.from_numpy(campos).float()
         item["camrotc2w"] = torch.from_numpy(camrot).float()
         item['lightpos'] = item["campos"]
         item['intrinsic'] = self.intrinsics[0]
-
-
 
         # near far
         item['far'] = torch.FloatTensor([self.opt.far_plane]).view(1, 1)
@@ -770,7 +660,6 @@ class NerfSynth360FtStudioDataset(BaseDataset):
             else:
                 item['bg_color'] = torch.FloatTensor(self.bg_color)
 
-
         for key, value in item.items():
             if not torch.is_tensor(value):
                 value = torch.as_tensor(value)
@@ -778,3 +667,14 @@ class NerfSynth360FtStudioDataset(BaseDataset):
 
         return item
 
+
+    def __len__(self):
+        return self.split_len
+
+
+    def name(self):
+        return 'NerfSynthFtStudioDataset'
+
+
+    def __del__(self):
+        print("end loading")
