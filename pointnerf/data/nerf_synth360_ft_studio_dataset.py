@@ -307,7 +307,7 @@ class NerfSynth360FtStudioDataset(BaseDataset):
         centerpixel = np.asarray(self.img_wh).astype(np.float32)[None, :] // 2
         camposes = []
         centerdirs = []
-        for i in range(0, self.train_len):
+        for i in range(0, self.split_len):
             c2w = self.cam2worlds[i].astype(np.float32)
             campos = c2w[:3, 3]
             camrot = c2w[:3, :3]
