@@ -19,10 +19,14 @@ import h5py
 from data.base_dataset import BaseDataset
 import configparser
 
+from pathlib import Path
 from os.path import join
 import cv2
 # import torch.nn.functional as F
 from .data_utils import get_dtu_raydir
+
+from nerfstudio.data.dataparsers.blender_dataparser import Blender, BlenderDataParserConfig
+
 
 FLIP_Z = np.asarray([
     [1,0,0],
@@ -116,7 +120,7 @@ def get_ray_directions(H, W, focal, center=None):
 
     return directions
 
-class NerfSynth360FtDataset(BaseDataset):
+class NerfSynth360FtStudioDataset(BaseDataset):
 
     def initialize(self, opt, img_wh=[800,800], downSample=1.0, max_len=-1, norm_w2c=None, norm_c2w=None):
         self.opt = opt
@@ -142,22 +146,30 @@ class NerfSynth360FtDataset(BaseDataset):
         else:
             self.bg_color = [float(one) for one in self.opt.bg_color.split(",")]
         self.transform = T.ToTensor()
+        
+        studio_dataset_path = Path(os.path.join(self.data_dir,self.scan))
+        self.dataparser_cfg = BlenderDataParserConfig(data=studio_dataset_path, alpha_color=self.opt.bg_color)
+        self.dataparser = Blender(config=self.dataparser_cfg)
+        self.studio_output = self.dataparser.get_dataparser_outputs(split=self.split)
+
+
 
         meta_split = "train" if self.split == "render" else self.split
         with open(os.path.join(self.data_dir, self.scan, f'transforms_{meta_split}.json'), 'r') as f:
             self.meta = json.load(f)
         with open(os.path.join(self.data_dir, self.scan, f'transforms_test.json'), 'r') as f:
             self.testmeta = json.load(f)
-        self.id_list = [i for i in range(len(self.meta["frames"]))]
-        self.test_id_list = [i for i in range(len(self.testmeta["frames"]))]
+        self.train_len = len(self.meta["frames"])
+        self.test_len = len(self.testmeta["frames"])
+        
         self.norm_w2c, self.norm_c2w = torch.eye(4, device="cuda", dtype=torch.float32), torch.eye(4, device="cuda", dtype=torch.float32)
         if opt.normview > 0:
-            _, _ , w2cs, c2ws = self.build_proj_mats(list=self.test_id_list)
+            _, _ , w2cs, c2ws = self.build_proj_mats_studio(list=self.test_id_list)
             norm_w2c, norm_c2w = self.normalize_cam(w2cs, c2ws)
         if opt.normview >= 2:
             self.norm_w2c, self.norm_c2w = torch.as_tensor(norm_w2c, device="cuda", dtype=torch.float32), torch.as_tensor(norm_c2w, device="cuda", dtype=torch.float32)
             norm_w2c, norm_c2w = None, None
-        self.proj_mats, self.intrinsics, self.world2cams, self.cam2worlds = self.build_proj_mats(norm_w2c=norm_w2c, norm_c2w=norm_c2w)
+        self.proj_mats, self.intrinsics, self.world2cams, self.cam2worlds = self.build_proj_mats_studio(norm_w2c=norm_w2c, norm_c2w=norm_c2w)
         if self.split != "render":
             self.build_init_metas()
             self.read_meta()
@@ -369,7 +381,39 @@ class NerfSynth360FtDataset(BaseDataset):
         # np.savetxt("/home/xharlie/user_space/codes/testNr/checkpoints/pcolallship360_load_confcolordir_KNN8_LRelu_grid320_333_agg2_prl2e3_prune1e4/points/save.txt", points_xyz.cpu().numpy(), delimiter=";")
         return points_xyz
 
+    def build_proj_mats_studio(self, meta=None, list=None, norm_w2c=None, norm_c2w=None):
+        proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
+        list = self.id_list if list is None else list
+        meta = self.meta if meta is None else meta
+        
+        # focal *= self.img_wh[0] / 800  # modify focal length to match size self.img_wh
+        # self.focal = focal
+        self.near_far = np.array([2.0, 6.0])
+        for vid in list:
+            fx_ls = self.studio_output.cameras.fx[vid].numpy()
+            fy_ls = self.studio_output.cameras.fy[vid].numpy()
+            fx, fy = float(fx_ls[0]), float(fy_ls[0])
 
+            frame = meta['frames'][vid]
+            c2w = np.array(frame['transform_matrix']) @ self.blender2opencv
+            if norm_w2c is not None:
+                c2w = norm_w2c @ c2w
+            w2c = np.linalg.inv(c2w)
+            cam2worlds.append(c2w)
+            world2cams.append(w2c)
+
+            intrinsic = np.array([[fx, 0, self.width / 2], [0, fy, self.height / 2], [0, 0, 1]])
+            intrinsics.append(intrinsic.copy().astype(np.float32))
+
+            # multiply intrinsics and extrinsics to get projection matrix
+            proj_mat_l = np.eye(4)
+            intrinsic[:2] = intrinsic[:2] / 4
+            proj_mat_l[:3, :4] = intrinsic @ w2c[:3, :4]
+            proj_mats += [proj_mat_l]
+
+        proj_mats, intrinsics = np.stack(proj_mats), np.stack(intrinsics)
+        world2cams, cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
+        return proj_mats, intrinsics, world2cams, cam2worlds
 
     def build_proj_mats(self, meta=None, list=None, norm_w2c=None, norm_c2w=None):
         proj_mats, intrinsics, world2cams, cam2worlds = [], [], [], []
