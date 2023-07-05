@@ -121,3 +121,6 @@ viewer/ui_Viewer.py
 viewer/Viewer_rc.py
 viewer/breeze_rc.py
 viewer/testData
+
+data_src
+checkpoints/nerfsynth
