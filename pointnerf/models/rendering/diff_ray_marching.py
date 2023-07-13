@@ -82,63 +82,6 @@ def sample_pdf(in_bins, in_weights, n_samples, det=False):
     return samples
 
 
-# def sample_pdf(in_bins, in_weights, n_samples, det=False):
-#     # bins: N x R x S x 1
-#     # weights: N x R x S x 1
-#     import tensorflow as tf
-#     tf.config.set_visible_devices([], 'GPU')
-
-#     ori_shape = in_bins.shape
-#     device = in_weights.device
-
-#     # bins: (N*R, S)
-#     bins = tf.convert_to_tensor(in_bins.data.cpu().numpy().reshape((-1, in_bins.shape[-2])))
-#     weights = tf.convert_to_tensor(in_weights.data.cpu().numpy().reshape((-1, in_weights.shape[-2])))
-
-#     bins = 0.5 * (bins[..., 1:] + bins[..., :-1])
-#     weights = weights[..., 1:-1]
-
-#     # Get pdf
-#     weights += 1e-5  # prevent nans
-#     pdf = weights / tf.reduce_sum(weights, -1, keepdims=True)
-#     cdf = tf.cumsum(pdf, -1)
-#     cdf = tf.concat([tf.zeros_like(cdf[..., :1]), cdf], -1)
-
-#     # Take uniform samples
-#     if det:
-#         u = tf.linspace(0., 1., n_samples)
-#         u = tf.broadcast_to(u, list(cdf.shape[:-1]) + [n_samples])
-#     else:
-#         u = tf.random.uniform(list(cdf.shape[:-1]) + [n_samples])
-
-#     # Invert CDF
-#     inds = tf.searchsorted(cdf, u, side='right')
-#     below = tf.maximum(0, inds - 1)
-#     above = tf.minimum(cdf.shape[-1] - 1, inds)
-#     inds_g = tf.stack([below, above], -1)
-#     cdf_g = tf.gather(cdf, inds_g, axis=-1, batch_dims=len(inds_g.shape) - 2)
-#     bins_g = tf.gather(bins, inds_g, axis=-1, batch_dims=len(inds_g.shape) - 2)
-
-#     denom = (cdf_g[..., 1] - cdf_g[..., 0])
-#     denom = tf.where(denom < 1e-5, tf.ones_like(denom), denom)
-#     t = (u - cdf_g[..., 0]) / denom
-#     samples = bins_g[..., 0] + t * (bins_g[..., 1] - bins_g[..., 0])
-
-#     # N x R x N_samples x 1
-#     samples = torch.from_numpy(samples.numpy()).view(
-#         (in_bins.shape[0], in_bins.shape[1], n_samples, 1)).to(in_bins.device)
-
-#     #  print(samples[0,0,:, 0])
-#     #  print(in_bins[0,0,:, 0])
-#     # N x R x (N_samples + S) x 1
-#     samples = torch.cat([samples, in_bins.detach()], dim=-2)
-#     #  samples = torch.cat([samples, in_bins.data], dim=-2)
-#     samples, _ = torch.sort(samples, dim=-2)
-#     samples = samples.detach()
-
-#     return samples
-
-
 def near_middle_far_ray_generation(campos,
                                    raydir,
                                    point_count,

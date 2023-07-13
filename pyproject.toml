@@ -7,7 +7,6 @@ dependencies=[
     "warmup_scheduler",
     "lpips",
     "open3d",
-    "torch==1.13.1+cu117",
     "h5py",
     "imageio",
     "scikit-image",
