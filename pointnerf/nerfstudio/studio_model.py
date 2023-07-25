@@ -81,12 +81,12 @@ class PointNerfConfig(ModelConfig):
     use_biased_sampler: bool = False
     field_dim: int = 64
 
-    
-    num_mlp_base_layers: int = 2
-    num_mlp_head_layers: int = 2
-    num_color_layers: int = 1
-    num_alpha_layers: int = 1
+    num_mlp_base_layers: Optional[int] = 2
+    num_mlp_head_layers: Optional[int] = 2
+    num_color_layers: Optional[int] = 3
+    num_alpha_layers: Optional[int] = 1
     hidden_size: int = 256
+    hidden_size_color: int = 128
 
     input_fourier_frequencies: int = 0
 
@@ -333,11 +333,17 @@ class PointNerf(Model):
             layer_width=self.config.hidden_size,
             out_activation=nn.LeakyReLU(),
         )
+
         # color and density, w/ simplified.
         color_in_dim = self.mlp_head.get_out_dim() + 2 * self.config.num_viewdir_freqs * 3 
-        density_in_dim = self.mlp_base.get_out_dim()
-        self.field_output_color = RGBFieldHead(in_dim=color_in_dim)
-        self.field_output_density = DensityFieldHead(in_dim=density_in_dim)
+        self.mlp_color = MLP(
+            in_dim=color_in_dim,
+            num_layers=self.config.num_color_layers,
+            layer_width=self.config.hidden_size_color,
+            out_activation=nn.LeakyReLU(),
+        )
+        self.field_output_color = RGBFieldHead(in_dim=self.mlp_color.get_out_dim())
+        self.field_output_density = DensityFieldHead(in_dim=self.mlp_head.get_out_dim())
 
         # TODO: samplers
         self.sampler_uniform = PointNerfSampler(num_samples=self.config.num_samples)
