@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from ..helpers.networks import init_seq, positional_encoding, PointNeRFEncoding
 from utils.spherical import SphericalHarm_table as SphericalHarm
 from ..helpers.geometrics import compute_world2local_dist
-
+from nerfstudio.field_components.encodings import NeRFEncoding
 
 
 class PointAggregator(torch.nn.Module):
@@ -239,7 +239,7 @@ class PointAggregator(torch.nn.Module):
             self.shcomp = SphericalHarm(opt.sh_degree)
 
         self.opt = opt
-        self.dist_dim = (4 if self.opt.agg_dist_pers == 30 else 6) if self.opt.agg_dist_pers > 9 else 3
+        self.dist_dim = (4 if self.opt.agg_dist_pers == 30 else 6) if self.opt.agg_dist_pers > 9 else 3  # 6
         self.dist_func = getattr(self, opt.agg_distance_kernel, None)
         assert self.dist_func is not None, "InterpAggregator doesn't have disance_kernel {} ".format(opt.agg_distance_kernel)
 
@@ -521,11 +521,13 @@ class PointAggregator(torch.nn.Module):
                     pts_pnt=pts_pnt[pnt_mask_flat, :]
         viewdirs = viewdirs @ sampled_Rw2c if uni_w2c else (viewdirs[..., None, :] @ sampled_Rw2c_ray).squeeze(-2)
         if self.num_viewdir_freqs > 0:
-            viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)
-            # _viewdirs = PointNeRFEncoding(
-            #     in_dim=3, num_frequencies=self.num_viewdir_freqs, min_freq_exp=0.0, max_freq_exp=self.num_viewdir_freqs-1, ori=True
-            # )
-            # viewdirss = _viewdirs.forward(viewdirs)
+            # viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)
+            _viewdirs = PointNeRFEncoding(  # NeRFEncoding
+                in_dim=2,
+                num_frequencies=self.num_viewdir_freqs,  # 4
+                ori=True,
+            )
+            viewdirs = _viewdirs.forward(viewdirs)
             ori_viewdirs, viewdirs = viewdirs[..., :3], viewdirs[..., 3:]
 
 
@@ -547,18 +549,20 @@ class PointAggregator(torch.nn.Module):
             if self.opt.dist_xyz_freq != 0:
                 # print(dists.dtype, (self.opt.dist_xyz_deno * np.linalg.norm(vsize)).dtype, dists_flat.dtype)
                 dists_flat = positional_encoding(dists_flat, self.opt.dist_xyz_freq)
-                # _dists_flat = PointNeRFEncoding(
-                #     in_dim=3, num_frequencies=self.opt.dist_xyz_freq, min_freq_exp=0.0, max_freq_exp=self.opt.dist_xyz_freq-1, ori=False
-                # )
-                # dists_flatt = _dists_flat(dists_flat)
+                _dists_flat = PointNeRFEncoding(  # NeRFEncoding
+                    in_dim=2,
+                    num_frequencies=self.opt.dist_xyz_freq,  # 5
+                    ori=True,
+                )
+                dists_flatt = _dists_flat(dists_flat)
             feat= sampled_embedding.view(-1, sampled_embedding.shape[-1])
             # print("feat", feat.shape)
 
-            if self.opt.apply_pnt_mask > 0:
-                feat = feat[pnt_mask_flat, :]
+            # if self.opt.apply_pnt_mask > 0:
+            feat = feat[pnt_mask_flat, :]
 
-            if self.opt.num_feat_freqs > 0:
-                feat = torch.cat([feat, positional_encoding(feat, self.opt.num_feat_freqs)], dim=-1)
+            #if self.opt.num_feat_freqs > 0:
+            feat = torch.cat([feat, positional_encoding(feat, self.opt.num_feat_freqs)], dim=-1)
             feat = torch.cat([feat, dists_flat], dim=-1)
             weight = weight.view(B * R * SR, K, 1)
             pts = pts_pnt
@@ -570,12 +574,13 @@ class PointAggregator(torch.nn.Module):
         # print("feat",feat.shape) # 501
         feat = self.block1(feat)
 
-        if self.opt.shading_feature_mlp_layer2>0:
-            if self.opt.agg_feat_xyz_mode != "None":
-                feat = torch.cat([feat, pts], dim=-1)
-            if self.opt.agg_intrp_order > 0:
-                feat = torch.cat([feat, dists_flat], dim=-1)
-            feat = self.block2(feat)
+        # not used
+        # if self.opt.shading_feature_mlp_layer2>0:
+        #     if self.opt.agg_feat_xyz_mode != "None":
+        #         feat = torch.cat([feat, pts], dim=-1)
+        #     if self.opt.agg_intrp_order > 0:
+        #         feat = torch.cat([feat, dists_flat], dim=-1)
+        #     feat = self.block2(feat)
 
         if self.opt.shading_feature_mlp_layer3>0:
             if sampled_color is not None:
@@ -594,6 +599,7 @@ class PointAggregator(torch.nn.Module):
                 feat = torch.cat([feat, sampled_dir - ori_viewdirs, torch.sum(sampled_dir*ori_viewdirs, dim=-1, keepdim=True)], dim=-1)
             feat = self.block3(feat)
 
+        # not used.
         if self.opt.agg_intrp_order == 1:
 
             if self.opt.apply_pnt_mask > 0:

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import os
-
+from skimage.metrics import mean_squared_error
+import numpy as np
 import nerfstudio.utils
 import torch
 from nerfstudio.cameras.rays import RayBundle, RaySamples
@@ -35,26 +36,9 @@ from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 from ..utils.extension import TetrahedraTracer, interpolate_values
+from ..models.helpers.networks import PointNeRFEncoding
 
 CONSOLE = Console(width=120)
-
-try:
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    import dm_pix as pix
-    import jax
-
-    jax_ssim = jax.jit(pix.ssim)
-
-    def mipnerf_ssim(image, rgb):
-        values = [
-            float(jax_ssim(gt, img))
-            for gt, img in zip(image.cpu().permute(0, 2, 3, 1).numpy(), rgb.cpu().permute(0, 2, 3, 1).numpy())
-        ]
-        return sum(values) / len(values)
-
-except ImportError:
-    CONSOLE.print("[yellow]JAX not installed, skipping Mip-NeRF SSIM[/yellow]")
-    mipnerf_ssim = None
 
 
 def skimage_ssim(image, rgb):
@@ -65,23 +49,44 @@ def skimage_ssim(image, rgb):
     ]
     return sum(values) / len(values)
 
+def skimage_rmse(image, rgb):
+    # Scikit implementation used in PointNeRF
+    values = [
+        np.sqrt(mean_squared_error(gt, img)) for gt, img in zip(image.cpu(), rgb.cpu())
+    ]
+    return sum(values) / len(values)
+
 
 @dataclass
-class TetrahedraNerfConfig(ModelConfig):
-    _target: Any = dataclasses.field(default_factory=lambda: TetrahedraNerf)
-    tetrahedra_path: Optional[Path] = None
+class PointNerfConfig(ModelConfig):
+    _target: Any = dataclasses.field(default_factory=lambda: PointNerf)
+    point_cloud_path: Optional[Path] = None
     num_tetrahedra_vertices: Optional[int] = None
     num_tetrahedra_cells: Optional[int] = None
 
+    num_pos_freqs: Optional[int] = 10
+    num_viewdir_freqs: Optional[int] = 4
+    num_feat_freqs: Optional[int] = 3
+    num_dist_freqs: Optional[int] = 5
+
+    agg_dist_pers: Optional[int] = 20
+    point_features_dim: Optional[int] = 32
+
+    point_color_mode: Optional[bool] = True  # False for only at features, True for color branch
+    point_dir_mode: Optional[bool] = True
+
     max_intersected_triangles: int = 512  # TODO: try 1024
-    num_samples: int = 256
+    num_samples: int = 80
     num_fine_samples: int = 256
     use_biased_sampler: bool = False
     field_dim: int = 64
 
+    
+    num_mlp_base_layers: int = 2
+    num_mlp_head_layers: int = 2
     num_color_layers: int = 1
-    num_density_layers: int = 3
-    hidden_size: int = 128
+    num_alpha_layers: int = 1
+    hidden_size: int = 256
 
     input_fourier_frequencies: int = 0
 
@@ -114,8 +119,8 @@ def map_from_real_distances_to_biased_with_bounds(num_bounds, bounds, samples):
     mapped_samples = torch.gather(cum_lengths, 1, intervals) + torch.gather(lengths, 1, intervals) * rest
     return mapped_samples
 
-
-class TetrahedraSampler(Sampler):
+# TODO:
+class PointNerfSampler(Sampler):
     """Sample points according to a function.
 
     Args:
@@ -199,56 +204,29 @@ class GradientScaler(torch.autograd.Function):
 
 
 # pylint: disable=attribute-defined-outside-init
-class TetrahedraNerf(Model):
+class PointNerf(Model):
     """Tetrahedra NeRF model
 
     Args:
         config: Basic NeRF configuration to instantiate model
     """
 
-    config: TetrahedraNerfConfig
+    config: PointNerfConfig
 
     def __init__(
         self,
-        config: TetrahedraNerfConfig,
-        dataparser_transform=None,
-        dataparser_scale=None,
+        config: PointNerfConfig,
+        # dataparser_transform=None,
+        # dataparser_scale=None,
         **kwargs,
     ) -> None:
         super().__init__(
             config=config,
             **kwargs,
         )
+        self._point_initialized = False
 
-        self.dataparser_transform = dataparser_transform
-        self.dataparser_scale = dataparser_scale
-        self._tetrahedra_tracer = None
-        if self.config.num_tetrahedra_vertices is None:
-            raise RuntimeError("The tetrahedra_path must be specified.")
-        self.register_buffer(
-            "tetrahedra_vertices",
-            torch.empty((self.config.num_tetrahedra_vertices, 3), dtype=torch.float32),
-        )
-        self.register_buffer(
-            "tetrahedra_cells",
-            torch.empty((self.config.num_tetrahedra_cells, 4), dtype=torch.int32),
-        )
-        self.register_parameter(
-            "tetrahedra_field",
-            nn.Parameter(
-                torch.empty(
-                    (self.config.field_dim, self.config.num_tetrahedra_vertices),
-                    dtype=torch.float32,
-                )
-            ),
-        )
-        self._tetrahedra_initialized = False
-
-    @staticmethod
-    def _init_tetrahedra_field(tetrahedra_field):
-        scale = 1e-4
-        tetrahedra_field.uniform_(-scale, scale)
-
+    # idk whats this
     def _load_from_state_dict(
         self,
         state_dict,
@@ -278,130 +256,113 @@ class TetrahedraNerf(Model):
         if will_initialize:
             self._tetrahedra_initialized = True
 
-    def _init_tetrahedra(self):
-        if self.config.tetrahedra_path is not None:
-            if not self.config.tetrahedra_path.exists():
-                raise RuntimeError(f"Specified tetrahedra path {self.config.tetrahedra_path} does not exist")
-            tetrahedra = torch.load(str(self.config.tetrahedra_path), map_location=torch.device("cpu"))
-            tetrahedra_vertices = tetrahedra["vertices"].float()
+    # TODO:
+    # load essential running things. (nerual point cloud)
+    def _init_pointnerf(self):
+        if self.config.point_cloud_path is not None:
+            if not self.config.point_cloud_path.exists():
+                raise RuntimeError(f"Specified point_cloud path {self.config.point_cloud_path} does not exist")
+            pointcloud = torch.load(str(self.config.point_cloud_path), map_location=torch.device("cpu"))
+            
+            # init
 
-            # Transform vertices using the dataparser transforms
-            if self.dataparser_scale is None:
-                raise RuntimeError(
-                    "Could not read the dataparser_scale and dataparser_transform parameters."
-                    "Make sure you are using the TetrahedraNerfPipeline with the model."
-                )
 
-            tetrahedra_vertices = (
-                torch.cat(
-                    (
-                        tetrahedra_vertices,
-                        torch.ones_like(tetrahedra_vertices[..., :1]),
-                    ),
-                    -1,
-                )
-                @ self.dataparser_transform.T
-            )
-            tetrahedra_vertices *= self.dataparser_scale
-
-            tetrahedra_cells = tetrahedra["cells"].int()
-            num_tetrahedra_vertices = len(tetrahedra_vertices)
-            self.tetrahedra_vertices.copy_(tetrahedra_vertices.to(device=self.tetrahedra_vertices.device))
-            self.tetrahedra_cells.copy_(tetrahedra_cells.to(device=self.tetrahedra_cells.device))
-            self._init_tetrahedra_field(self.tetrahedra_field.data)
-            if self.config.initialize_colors:
-                assert "colors" in tetrahedra
-                assert tetrahedra["colors"].dtype == torch.uint8
-                assert tetrahedra["colors"].shape == (num_tetrahedra_vertices, 4)
-                colors = tetrahedra["colors"].float().to(self.tetrahedra_field.device) * 2.0 / 255.0 - 1.0
-                self.tetrahedra_field.data[1:4, :] = colors[:, :3].T
-                self.tetrahedra_field.data[0, :] = colors[:, 3]
-            CONSOLE.print(f"Tetrahedra initialized from file {self.config.tetrahedra_path}:")
-            CONSOLE.print(f"    Num points: {len(self.tetrahedra_vertices)}")
-            CONSOLE.print(f"    Num tetrahedra: {len(self.tetrahedra_cells)}")
-            self._tetrahedra_initialized = True
+            self._point_initialized = True
         else:
-            raise RuntimeError("The tetrahedra_path must be specified.")
+            raise RuntimeError("The point_cloud_path must be specified.")
 
-    def get_tetrahedra_tracer(self):
-        device = self.tetrahedra_field.device
-        if device.type != "cuda":
-            raise RuntimeError("Tetrahedra tracer is only supported on a CUDA device")
-        if self._tetrahedra_tracer is not None:
-            if self._tetrahedra_tracer.device == device:
-                return self._tetrahedra_tracer
-            del self._tetrahedra_tracer
-            self._tetrahedra_tracer = None
-        if not self._tetrahedra_initialized:
-            self._init_tetrahedra()
-        self._tetrahedra_tracer = TetrahedraTracer(device)
-        self._tetrahedra_tracer.load_tetrahedra(self.tetrahedra_vertices, self.tetrahedra_cells)
-        return self._tetrahedra_tracer
+
+    # optional.
+    # def get_tetrahedra_tracer(self):
+    #     device = self.tetrahedra_field.device
+    #     if device.type != "cuda":
+    #         raise RuntimeError("Tetrahedra tracer is only supported on a CUDA device")
+    #     if self._tetrahedra_tracer is not None:
+    #         if self._tetrahedra_tracer.device == device:
+    #             return self._tetrahedra_tracer
+    #         del self._tetrahedra_tracer
+    #         self._tetrahedra_tracer = None
+    #     if not self._point_initialized:
+    #         self._init_pointnerf()
+    #     self._tetrahedra_tracer = TetrahedraTracer(device)
+    #     self._tetrahedra_tracer.load_tetrahedra(self.tetrahedra_vertices, self.tetrahedra_cells)
+    #     return self._tetrahedra_tracer
 
     def populate_modules(self):
         """Set the fields and modules"""
         super().populate_modules()
 
         # fields
-        mlp_in_dim = self.config.field_dim
-        if self.config.input_fourier_frequencies > 0:
-            self.position_encoding = NeRFEncoding(
-                in_dim=self.config.field_dim,
-                num_frequencies=self.config.input_fourier_frequencies,
-                min_freq_exp=0.0,
-                max_freq_exp=float(self.config.input_fourier_frequencies),
-                include_input=True,
-            )
-            mlp_in_dim += self.position_encoding.get_out_dim()
-        else:
-            self.position_encoding = lambda x: x
-        self.direction_encoding = NeRFEncoding(
-            in_dim=3,
-            num_frequencies=4,
-            min_freq_exp=0.0,
-            max_freq_exp=4.0,
-            include_input=True,
+        self.position_encoding = PointNeRFEncoding(  # NeRFEncoding
+            in_dim=2,
+            num_frequencies=self.config.num_pos_freqs, # 10
+            ori=False
         )
+        self.direction_encoding = PointNeRFEncoding(  # NeRFEncoding
+            in_dim=2,
+            num_frequencies=self.config.num_viewdir_freqs,  # 4
+            ori=True
+        )
+        self.feature_encoding = PointNeRFEncoding(  # NeRFEncoding
+            in_dim=2,
+            num_frequencies=self.config.num_feat_freqs,  # 3
+            ori=False
+        )
+        self.dists_encoding = PointNeRFEncoding(  # NeRFEncoding
+            in_dim=2,
+            num_frequencies=self.config.num_dist_freqs,  # 5
+            ori=False
+        )
+
+        # block1
+        dist_dim = (4 if self.config.agg_dist_pers == 30 else 6) if self.config.agg_dist_pers > 9 else 3  # 6
+        dist_xyz_dim = dist_dim if self.config.num_dist_freqs == 0 else 2 * abs(self.config.num_dist_freqs) * dist_dim
+        mlp_in_dim = 2 * self.config.num_feat_freqs * self.config.point_features_dim + dist_xyz_dim + self.config.point_features_dim # simplified
         self.mlp_base = MLP(
             in_dim=mlp_in_dim,
-            num_layers=self.config.num_density_layers,
+            num_layers=self.config.num_mlp_base_layers,
             layer_width=self.config.hidden_size,
-            out_activation=nn.ReLU(),
+            out_activation=nn.LeakyReLU(),
         )
+
+        # block3
+        mlp_in_dim += (3 if self.config.point_color_mode else 0) + (4 if self.config.point_dir_mode else 0)
         self.mlp_head = MLP(
-            in_dim=self.mlp_base.get_out_dim() + self.direction_encoding.get_out_dim(),
-            num_layers=self.config.num_color_layers,
+            in_dim=mlp_in_dim,
+            num_layers=self.config.num_mlp_head_layers,
             layer_width=self.config.hidden_size,
-            out_activation=nn.ReLU(),
+            out_activation=nn.LeakyReLU(),
         )
+        # color and density, w/ simplified.
+        color_in_dim = self.mlp_head.get_out_dim() + 2 * self.config.num_viewdir_freqs * 3 
+        density_in_dim = self.mlp_base.get_out_dim()
+        self.field_output_color = RGBFieldHead(in_dim=color_in_dim)
+        self.field_output_density = DensityFieldHead(in_dim=density_in_dim)
 
-        self.field_output_color = RGBFieldHead(in_dim=self.mlp_head.get_out_dim())
-        self.field_output_density = DensityFieldHead(in_dim=self.mlp_base.get_out_dim())
+        # TODO: samplers
+        self.sampler_uniform = PointNerfSampler(num_samples=self.config.num_samples)
+        # if self.config.num_fine_samples > 0:
+        #     self.sampler_pdf = PDFSampler(num_samples=self.config.num_fine_samples)
 
-        # samplers
-        if self.config.use_biased_sampler:
-            self.sampler_uniform = TetrahedraSampler(num_samples=self.config.num_samples)
-        else:
-            self.sampler_uniform = UniformSampler(num_samples=self.config.num_samples)
-        if self.config.num_fine_samples > 0:
-            self.sampler_pdf = PDFSampler(num_samples=self.config.num_fine_samples)
-
+        # TODO: is it right? just copy and paste from tetra's
         # renderers
         self._background_color = nerfstudio.utils.colors.WHITE
         self.renderer_rgb = RGBRenderer(background_color=self._background_color)
         self.renderer_accumulation = AccumulationRenderer()
         self.renderer_depth = DepthRenderer()
 
-        # losses
+        # TODO: losses, maybe 2.
         self.rgb_loss = MSELoss()
 
-        # metrics
+        # metrics, tracked.
         self.psnr = PeakSignalNoiseRatio(data_range=1.0)
         self.skimage_ssim = skimage_ssim
-        self.nerfstudio_ssim = structural_similarity_index_measure
+        self.skimage_rmse = skimage_rmse
         self.lpips = LearnedPerceptualImagePatchSimilarity()
-        # self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
+        self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
 
+
+    # dont know
     # Just to allow for size reduction of the checkpoint
     def load_state_dict(self, state_dict, strict: bool = True):
         for k, v in self.lpips.state_dict().items():
@@ -410,7 +371,7 @@ class TetrahedraNerf(Model):
             for k, v in self.lpips_vgg.state_dict().items():
                 state_dict[f"lpips_vgg.{k}"] = v
         return super().load_state_dict(state_dict, strict)
-
+    # dont know
     # Just to allow for size reduction of the checkpoint
     def state_dict(self, *args, prefix="", **kwargs):
         state_dict = super().state_dict(*args, prefix=prefix, **kwargs)
@@ -595,19 +556,18 @@ class TetrahedraNerf(Model):
         image = torch.moveaxis(image, -1, 0)[None, ...]
         rgb = torch.moveaxis(rgb, -1, 0)[None, ...]
 
-        psnr = self.psnr(image, rgb)
+        psnr = self.psnr(image, rgb).item()
+        ssim = self.skimage_ssim(image, rgb)
         lpips = self.lpips(image, rgb)
-
+        lpips_vgg = self.lpips_vgg(image, rgb)
+        rmse = self.skimage_rmse(image, rgb)
         metrics_dict = {
-            "psnr": float(psnr.item()),
+            "psnr": float(psnr),
+            "ssim": float(ssim),
             "lpips": float(lpips),
-            # "lpips_vgg": float(self.lpips_vgg(image, rgb)),
-            "nerfstudio_ssim": float(self.nerfstudio_ssim(image, rgb)),
-            "skimage_ssim": float(self.skimage_ssim(image, rgb)),
-            "lpips": float(lpips),
+            "lpips_vgg": float(lpips_vgg),
+            "rmse": float(rmse)
         }
-        if mipnerf_ssim is not None:
-            metrics_dict["mipnerf_ssim"] = float(mipnerf_ssim(image, rgb))
 
         images_dict = {
             "img": combined_rgb,

@@ -199,22 +199,18 @@ class PointNeRFEncoding(Encoding):
         self,
         in_dim: int,
         num_frequencies: int,
-        min_freq_exp: float,
-        max_freq_exp: float,
         ori: bool = False,
     ) -> None:
         super().__init__(in_dim)
         self.num_frequencies = num_frequencies
-        self.min_freq = min_freq_exp
-        self.max_freq = max_freq_exp
         self.ori = ori        
 
     def forward(
         self, in_tensor: Float[Tensor, "*bs input_dim"], covs: Optional[Float[Tensor, "*bs input_dim input_dim"]] = None
     ) -> Float[Tensor, "*bs output_dim"]:
-        freq_bands = 2 ** torch.linspace(self.min_freq, self.max_freq, self.num_frequencies).to(in_tensor.device)  # (F,)
+        freq_bands = (2**torch.arange(self.num_frequencies).float()).to(in_tensor.device)  # (F,)
         ori_c = in_tensor.shape[-1]
-        pts = (in_tensor[..., None] * freq_bands).reshape(in_tensor.shape[:-1] + (freq_bands * in_tensor.shape[-1], ))  # (..., DF)
+        pts = (in_tensor[..., None] * freq_bands).reshape(in_tensor.shape[:-1] + (self.num_frequencies * in_tensor.shape[-1], ))  # (..., DF)
         if self.ori:
             pts = torch.cat([in_tensor, torch.sin(pts), torch.cos(pts)], dim=-1).reshape(pts.shape[:-1]+(pts.shape[-1]*2+ori_c,))
         else:
