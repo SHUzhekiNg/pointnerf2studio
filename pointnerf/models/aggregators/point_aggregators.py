@@ -2,10 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from ..helpers.networks import init_seq, positional_encoding
+from ..helpers.networks import init_seq, positional_encoding, PointNeRFEncoding
 from utils.spherical import SphericalHarm_table as SphericalHarm
 from ..helpers.geometrics import compute_world2local_dist
-
 
 
 
@@ -252,8 +251,7 @@ class PointAggregator(torch.nn.Module):
         self.pnt_channels = (2 * self.num_freqs * 3) if self.num_freqs > 0 else 3
         self.viewdir_channels = (2 * self.num_viewdir_freqs * 3 + self.opt.view_ori * 3) if self.num_viewdir_freqs > 0 else 3
 
-        self.which_agg_model = opt.which_agg_model.split("_")[0] if opt.which_agg_model.startswith("feathyper") else opt.which_agg_model
-        getattr(self, self.which_agg_model+"_init", None)(opt, block_init_lst)
+        self.viewmlp_init(opt, block_init_lst)
 
         self.density_super_act = torch.nn.Softplus()
         self.density_act = torch.nn.ReLU()
@@ -485,9 +483,27 @@ class PointAggregator(torch.nn.Module):
         return weights, embedding[..., 7:]
 
 
-    def viewmlp(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists):
+    def viewmlp(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight, total_len, ray_valid, dists):
         # print("sampled_Rw2c", sampled_Rw2c.shape, sampled_xyz.shape)
         # assert sampled_Rw2c.dim() == 2
+
+        """
+        !params truly needed:
+        :sampled_color
+        :sampled_Rw2c
+        :sampled_dir
+        :sampled_embedding
+        :sample_pnt_mask
+        :sample_ray_dirs
+        :sample_loc_w
+
+        """
+
+        
+        pnt_mask_flat = sample_pnt_mask.view(-1)
+        pts = sample_loc_w.view(-1, sample_loc_w.shape[-1])
+        viewdirs = sample_ray_dirs.view(-1, sample_ray_dirs.shape[-1])
+        
         B, R, SR, K, _ = dists.shape
         sampled_Rw2c = sampled_Rw2c.transpose(-1, -2)
         uni_w2c = sampled_Rw2c.dim() == 2
@@ -506,6 +522,10 @@ class PointAggregator(torch.nn.Module):
         viewdirs = viewdirs @ sampled_Rw2c if uni_w2c else (viewdirs[..., None, :] @ sampled_Rw2c_ray).squeeze(-2)
         if self.num_viewdir_freqs > 0:
             viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)
+            # _viewdirs = PointNeRFEncoding(
+            #     in_dim=3, num_frequencies=self.num_viewdir_freqs, min_freq_exp=0.0, max_freq_exp=self.num_viewdir_freqs-1, ori=True
+            # )
+            # viewdirss = _viewdirs.forward(viewdirs)
             ori_viewdirs, viewdirs = viewdirs[..., :3], viewdirs[..., 3:]
 
 
@@ -527,6 +547,10 @@ class PointAggregator(torch.nn.Module):
             if self.opt.dist_xyz_freq != 0:
                 # print(dists.dtype, (self.opt.dist_xyz_deno * np.linalg.norm(vsize)).dtype, dists_flat.dtype)
                 dists_flat = positional_encoding(dists_flat, self.opt.dist_xyz_freq)
+                # _dists_flat = PointNeRFEncoding(
+                #     in_dim=3, num_frequencies=self.opt.dist_xyz_freq, min_freq_exp=0.0, max_freq_exp=self.opt.dist_xyz_freq-1, ori=False
+                # )
+                # dists_flatt = _dists_flat(dists_flat)
             feat= sampled_embedding.view(-1, sampled_embedding.shape[-1])
             # print("feat", feat.shape)
 
@@ -725,10 +749,11 @@ class PointAggregator(torch.nn.Module):
 
 
     def forward(self, sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, grid_vox_sz):
-        # return B * R * SR * channel
+        # return B * R(ay) * SR( sample per ray (80) ) * channel
         '''
-        :param sampled_conf: B x valid R x SR x K x 1
-        :param sampled_embedding: B x valid R x SR x K x F
+        :param sampled_color:     B x valid R x SR x K x 3
+        :param sampled_conf:      B x valid R x SR x K x 1
+        :param sampled_embedding: B x valid R x SR x K x F (self.points_embeding.shape[2]+self.xyz.shape[1]*2) 32+3*2
         :param sampled_xyz_pers:  B x valid R x SR x K x 3
         :param sampled_xyz:       B x valid R x SR x K x 3
         :param sample_pnt_mask:   B x valid R x SR x K
@@ -760,7 +785,6 @@ class PointAggregator(torch.nn.Module):
             else:
                 B, R, SR, K, _ = sampled_xyz_pers.shape
                 dists = torch.zeros([B, R, SR, K, 3], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
-
         elif self.opt.agg_dist_pers == 10:
 
             if sampled_xyz_pers.shape[1] > 0:
@@ -769,20 +793,16 @@ class PointAggregator(torch.nn.Module):
             else:
                 B, R, SR, K, _ = sampled_xyz_pers.shape
                 dists = torch.zeros([B, R, SR, K, 6], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
-
         elif self.opt.agg_dist_pers == 20:
-
             if sampled_xyz_pers.shape[1] > 0:
                 xdist = sampled_xyz_pers[..., 0] * sampled_xyz_pers[..., 2] - sample_loc[:, :, :, None, 0] * sample_loc[:, :, :, None, 2]
                 ydist = sampled_xyz_pers[..., 1] * sampled_xyz_pers[..., 2] - sample_loc[:, :, :, None, 1] * sample_loc[:, :, :, None, 2]
                 zdist = sampled_xyz_pers[..., 2] - sample_loc[:, :, :, None, 2]
                 dists = torch.stack([xdist, ydist, zdist], dim=-1)
-                # dists = torch.cat([sampled_xyz - sample_loc_w[..., None, :], dists], dim=-1)
                 dists = torch.cat([sampled_xyz - sample_loc_w[..., None, :], dists], dim=-1)
             else:
                 B, R, SR, K, _ = sampled_xyz_pers.shape
                 dists = torch.zeros([B, R, SR, K, 6], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
-
         elif self.opt.agg_dist_pers == 30:
 
             if sampled_xyz_pers.shape[1] > 0:
@@ -792,23 +812,25 @@ class PointAggregator(torch.nn.Module):
                 B, R, SR, K, _ = sampled_xyz_pers.shape
                 dists = torch.zeros([B, R, SR, K, 4], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
         else:
-            print("illegal agg_dist_pers code: ", agg_dist_pers)
+            print("illegal agg_dist_pers code: ", self.opt.agg_dist_pers)
             exit()
         # self.print_point(dists, sample_loc_w, sampled_xyz, sample_loc, sampled_xyz_pers, sample_pnt_mask)
+        
 
-        weight, sampled_embedding = self.dist_func(sampled_embedding, dists, sample_pnt_mask, vsize, grid_vox_sz, axis_weight=self.axis_weight)
-
+        # weight:              B x valid R x SR         (1 * R * 80 * 8)
+        # sampled_embedding:   B x valid R x SR x 32    (1 * R * 80 * 8 * 32)
+        weight, sampled_embedding = self.dist_func(sampled_embedding, dists, sample_pnt_mask, vsize, grid_vox_sz, axis_weight=self.axis_weight) # linear
+        
         if self.opt.agg_weight_norm > 0 and self.opt.agg_distance_kernel != "trilinear" and not self.opt.agg_distance_kernel.startswith("num"):
             weight = weight / torch.clamp(torch.sum(weight, dim=-1, keepdim=True), min=1e-8)
 
-        pnt_mask_flat = sample_pnt_mask.view(-1)
-        pts = sample_loc_w.view(-1, sample_loc_w.shape[-1])
-        viewdirs = sample_ray_dirs.view(-1, sample_ray_dirs.shape[-1])
+        
         conf_coefficient = 1
         if sampled_conf is not None:
             conf_coefficient = self.gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)
 
-        output, _ = getattr(self, self.which_agg_model, None)(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight * conf_coefficient, pnt_mask_flat, pts, viewdirs, total_len, ray_valid, in_shape, dists)
+        output, _ = self.viewmlp(sampled_color, sampled_Rw2c, sampled_dir, sampled_conf, sampled_embedding, sampled_xyz_pers, sampled_xyz, sample_pnt_mask, sample_loc, sample_loc_w, sample_ray_dirs, vsize, weight * conf_coefficient, total_len, ray_valid,  dists)
+        
         if (self.opt.sparse_loss_weight <=0) and ("conf_coefficient" not in self.opt.zero_one_loss_items) and self.opt.prob == 0:
             weight, conf_coefficient = None, None
         return output.view(in_shape[:-1] + (self.opt.shading_color_channel_num + 1,)), ray_valid.view(in_shape[:-1]), weight, conf_coefficient

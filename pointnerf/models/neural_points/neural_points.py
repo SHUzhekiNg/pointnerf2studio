@@ -646,21 +646,21 @@ class NeuralPoints(nn.Module):
         ones = torch.as_tensor([[[0, 0, 0, 1]]], device=M.device, dtype=M.dtype).expand(len(M),-1, -1)
         return torch.cat([M, ones], dim=-2)
 
-
-    # def pers2w(self, point_xyz_pers, camrotc2w, campos):
-    #     #     point_xyz_pers    B X M X 3
-    #
-    #     x_pers = point_xyz_pers[..., 0] * point_xyz_pers[..., 2]
-    #     y_pers = - point_xyz_pers[..., 1] * point_xyz_pers[..., 2]
-    #     z_pers = - point_xyz_pers[..., 2]
-    #     xyz_c = torch.stack([x_pers, y_pers, z_pers], dim=-1)
-    #     xyz_w_shift = torch.sum(xyz_c[...,None,:] * camrotc2w, dim=-1)
-    #     # print("point_xyz_pers[..., 0, 0]", point_xyz_pers[..., 0, 0].shape, point_xyz_pers[..., 0, 0])
-    #     ray_dirs = xyz_w_shift / (torch.linalg.norm(xyz_w_shift, dim=-1, keepdims=True) + 1e-7)
-    #
-    #     xyz_w = xyz_w_shift + campos[:, None, :]
-    #     return xyz_w, ray_dirs
-
+    """
+    def pers2w(self, point_xyz_pers, camrotc2w, campos):
+        #     point_xyz_pers    B X M X 3
+    
+        x_pers = point_xyz_pers[..., 0] * point_xyz_pers[..., 2]
+        y_pers = - point_xyz_pers[..., 1] * point_xyz_pers[..., 2]
+        z_pers = - point_xyz_pers[..., 2]
+        xyz_c = torch.stack([x_pers, y_pers, z_pers], dim=-1)
+        xyz_w_shift = torch.sum(xyz_c[...,None,:] * camrotc2w, dim=-1)
+        # print("point_xyz_pers[..., 0, 0]", point_xyz_pers[..., 0, 0].shape, point_xyz_pers[..., 0, 0])
+        ray_dirs = xyz_w_shift / (torch.linalg.norm(xyz_w_shift, dim=-1, keepdims=True) + 1e-7)
+    
+        xyz_w = xyz_w_shift + campos[:, None, :]
+        return xyz_w, ray_dirs
+    """
 
 
     def passfunc(self, input, vsize):
