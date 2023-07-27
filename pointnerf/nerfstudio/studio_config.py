@@ -1,7 +1,8 @@
 import dataclasses
 
 from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManagerConfig
-from nerfstudio.data.dataparsers.minimal_dataparser import BlenderDataParserConfig
+# from nerfstudio.data.dataparsers.minimal_dataparser import BlenderDataParserConfig
+from nerfstudio.data.dataparsers.minimal_dataparser import MinimalDataParserConfig
 from nerfstudio.engine.optimizers import RAdamOptimizerConfig
 from nerfstudio.engine.schedulers import ExponentialDecaySchedulerConfig
 from nerfstudio.engine.trainer import TrainerConfig
@@ -12,16 +13,23 @@ from .studio_model import PointNerf, PointNerfConfig
 from .studio_pipeline import PointNerfPipeline
 from ..data.studio_datamanager import PointNerfDataManagerConfig
 
-pointnerf_original_config = TrainerConfig(
-    method_name="pointnerf_original_config",
-    pipeline=PointNerfPipeline(
-        datamanager=PointNerfDataManagerConfig(
-            dataparser=BlenderDataParserConfig(),
-            eval_num_rays_per_batch=400,
-            train_num_rays_per_batch=400,
+pointnerf_config = TrainerConfig(
+    method_name="pointnerf-original",
+    pipeline=VanillaPipelineConfig(
+        _target=PointNerfPipeline,
+        datamanager=VanillaDataManagerConfig(
+            # _target=RayPruningDataManager,
+            dataparser=MinimalDataParserConfig(),
+            eval_num_rays_per_batch=4096,
+            train_num_rays_per_batch=4096,
         ),
+        # datamanager=PointNerfDataManagerConfig(
+        #     dataparser=BlenderDataParserConfig(),
+        #     eval_num_rays_per_batch=400,
+        #     train_num_rays_per_batch=400,
+        # ),
         model=PointNerfConfig(
-        	#_target=PointNerf
+        	_target=PointNerf
     	),
     ),
     max_num_iterations=300000,
@@ -41,6 +49,6 @@ pointnerf_original_config = TrainerConfig(
 )
 
 
-tetranerf_original = MethodSpecification(
-    config=pointnerf_original_config, description="Implementation of Point-NeRF to Nerfstudio."
+pointnerf_original = MethodSpecification(
+    config=pointnerf_config, description="Implementation of Point-NeRF to Nerfstudio."
 )

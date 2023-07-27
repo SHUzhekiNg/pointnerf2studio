@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import os
 from skimage.metrics import mean_squared_error
 import numpy as np
+import glob
 import nerfstudio.utils
 import torch
 from nerfstudio.cameras.rays import RayBundle, RaySamples
@@ -35,7 +36,7 @@ from torchmetrics import PeakSignalNoiseRatio
 from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from ..utils.extension import TetrahedraTracer, interpolate_values
+# from ..utils.extension import TetrahedraTracer, interpolate_values
 from ..models.helpers.networks import PointNeRFEncoding
 
 CONSOLE = Console(width=120)
@@ -56,11 +57,16 @@ def skimage_rmse(image, rgb):
     ]
     return sum(values) / len(values)
 
+def get_latest_epoch(resume_dir):
+    os.makedirs(resume_dir, exist_ok=True)
+    str_epoch = [file.split("_")[0] for file in os.listdir(resume_dir) if file.endswith("_states.pth")]
+    int_epoch = [int(i) for i in str_epoch]
+    return None if len(int_epoch) == 0 else str_epoch[int_epoch.index(max(int_epoch))]
 
 @dataclass
 class PointNerfConfig(ModelConfig):
     _target: Any = dataclasses.field(default_factory=lambda: PointNerf)
-    point_cloud_path: Optional[Path] = None
+    path_point_cloud: Optional[Path] = None
     num_tetrahedra_vertices: Optional[int] = None
     num_tetrahedra_cells: Optional[int] = None
 
@@ -95,12 +101,9 @@ class PointNerfConfig(ModelConfig):
     """Use gradient scaler where the gradients are lower for points closer to the camera."""
 
     def __post_init__(self):
-        if self.tetrahedra_path is not None and self.num_tetrahedra_vertices is None:
-            if not self.tetrahedra_path.exists():
-                raise RuntimeError(f"Tetrahedra path {self.tetrahedra_path} does not exist")
-            tetrahedra = torch.load(self.tetrahedra_path)
-            self.num_tetrahedra_vertices = len(tetrahedra["vertices"])
-            self.num_tetrahedra_cells = len(tetrahedra["cells"])
+        if self.path_point_cloud is not None and self.num_tetrahedra_vertices is None:
+            if not self.path_point_cloud.exists():
+                raise RuntimeError(f"PointCloud path {self.path_point_cloud} does not exist")
 
 
 # Map from uniform space to transformed space
@@ -205,7 +208,7 @@ class GradientScaler(torch.autograd.Function):
 
 # pylint: disable=attribute-defined-outside-init
 class PointNerf(Model):
-    """Tetrahedra NeRF model
+    """PointNerf model
 
     Args:
         config: Basic NeRF configuration to instantiate model
@@ -225,47 +228,52 @@ class PointNerf(Model):
             **kwargs,
         )
         self._point_initialized = False
+        self._init_pointnerf()
 
-    # idk whats this
-    def _load_from_state_dict(
-        self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-    ):
-        will_initialize = False
-        if (
-            f"{prefix}tetrahedra_vertices" in state_dict
-            and f"{prefix}tetrahedra_cells" in state_dict
-            and f"{prefix}tetrahedra_field" in state_dict
-        ):
-            will_initialize = True
-        super()._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
-        )
-        if will_initialize:
-            self._tetrahedra_initialized = True
 
     # TODO:
     # load essential running things. (nerual point cloud)
     def _init_pointnerf(self):
-        if self.config.point_cloud_path is not None:
-            if not self.config.point_cloud_path.exists():
-                raise RuntimeError(f"Specified point_cloud path {self.config.point_cloud_path} does not exist")
-            pointcloud = torch.load(str(self.config.point_cloud_path), map_location=torch.device("cpu"))
-            
+        if self.config.path_point_cloud is not None:
+            if not self.config.path_point_cloud.exists():
+                raise RuntimeError(f"Specified point_cloud path {self.config.path_point_cloud} does not exist")
             # init
+            if len([n for n in glob.glob(str(self.config.path_point_cloud) + "/*_net_ray_marching.pth") if os.path.isfile(n)]) == 0:
+                raise RuntimeError(f"Cannot find any _net_ray_marching.pth in {self.config.path_point_cloud}")
 
+            best_PSNR=0.0
+            best_iter=0
+            resume_iter = get_latest_epoch(self.config.path_point_cloud)
+            states = torch.load(
+                os.path.join(self.config.path_point_cloud, '{}_states.pth'.format(resume_iter)), map_location=torch.device("cuda"))
+            epoch_count = states['epoch_count']
+            total_steps = states['total_steps']
+            best_PSNR = states['best_PSNR'] if 'best_PSNR' in states else best_PSNR
+            best_iter = states['best_iter'] if 'best_iter' in states else best_iter
+            best_PSNR = best_PSNR.item() if torch.is_tensor(best_PSNR) else best_PSNR
+            CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+            CONSOLE.print('Continue training from {} epoch'.format(resume_iter))
+            CONSOLE.print(f"Iter: {total_steps}")
+            CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+            del states
+            # opt.mode = 2
+            # opt.load_points=1  # ?????
+            # opt.resume_iter = resume_iter
+            # opt.is_train=True
+            # model = create_model(opt)
+
+            load_filename = '{}_net_ray_marching.pth'.format(resume_iter)
+            load_path = os.path.join(self.config.path_point_cloud, load_filename)
+            print('loading', load_filename, " from ", load_path)
+            if not os.path.isfile(load_path):
+                raise RuntimeError(f'cannot load {load_filename}')
+            state_dict = torch.load(load_path, map_location=self.device)
+            # if resume_iter=="best" and name == "ray_marching" and self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and self.neural_points.points_conf is not None:
+            #     assert "neural_points.points_conf" not in state_dict
+            #     state_dict["neural_points.points_conf"] = torch.ones_like(self.net_ray_marching.module.neural_points.points_conf) * self.opt.default_conf
+            if isinstance(self, nn.DataParallel):
+                self = self.module
+            self.load_state_dict_from_init(state_dict)
 
             self._point_initialized = True
         else:
@@ -322,15 +330,17 @@ class PointNerf(Model):
             in_dim=mlp_in_dim,
             num_layers=self.config.num_mlp_base_layers,
             layer_width=self.config.hidden_size,
+            activation=nn.LeakyReLU(),
             out_activation=nn.LeakyReLU(),
         )
 
         # block3
-        mlp_in_dim += (3 if self.config.point_color_mode else 0) + (4 if self.config.point_dir_mode else 0)
+        mlp_in_dim = self.mlp_base.get_out_dim() + (3 if self.config.point_color_mode else 0) + (4 if self.config.point_dir_mode else 0)
         self.mlp_head = MLP(
             in_dim=mlp_in_dim,
             num_layers=self.config.num_mlp_head_layers,
             layer_width=self.config.hidden_size,
+            activation=nn.LeakyReLU(),
             out_activation=nn.LeakyReLU(),
         )
 
@@ -340,6 +350,7 @@ class PointNerf(Model):
             in_dim=color_in_dim,
             num_layers=self.config.num_color_layers,
             layer_width=self.config.hidden_size_color,
+            activation=nn.LeakyReLU(),
             out_activation=nn.LeakyReLU(),
         )
         self.field_output_color = RGBFieldHead(in_dim=self.mlp_color.get_out_dim())
@@ -368,6 +379,43 @@ class PointNerf(Model):
         self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
 
 
+    def load_state_dict_from_init(self, state_dict, strict: bool = True):
+        # block1 -> mlp_base
+        self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
+        self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
+        self.mlp_base.layers[1].weight.data = state_dict["aggregator.block1.2.weight"]
+        self.mlp_base.layers[1].bias.data = state_dict["aggregator.block1.2.bias"]
+
+        # block3 -> mlp_head
+        self.mlp_head.layers[0].weight.data = state_dict["aggregator.block3.0.weight"]
+        self.mlp_head.layers[0].bias.data = state_dict["aggregator.block3.0.bias"]
+        self.mlp_head.layers[1].weight.data = state_dict["aggregator.block3.2.weight"]
+        self.mlp_head.layers[1].bias.data = state_dict["aggregator.block3.2.bias"]
+
+        # color_branch -> mlp_color
+        self.mlp_color.layers[0].weight.data = state_dict["aggregator.color_branch.0.weight"]
+        self.mlp_color.layers[0].bias.data = state_dict["aggregator.color_branch.0.bias"]
+        self.mlp_color.layers[1].weight.data = state_dict["aggregator.color_branch.2.weight"]
+        self.mlp_color.layers[1].bias.data = state_dict["aggregator.color_branch.2.bias"]
+        self.mlp_color.layers[2].weight.data = state_dict["aggregator.color_branch.4.weight"]
+        self.mlp_color.layers[2].bias.data = state_dict["aggregator.color_branch.4.bias"]
+
+        # color_branch.6 -> field_output_color
+        self.field_output_color.net.weight.data = state_dict["aggregator.color_branch.6.weight"]
+        self.field_output_color.net.bias.data = state_dict["aggregator.color_branch.6.bias"]
+
+        # alpha_branch.0 -> field_output_density
+        self.field_output_density.net.weight.data = state_dict["aggregator.alpha_branch.0.weight"]
+        self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
+
+        # neural points
+        self.points_xyz = state_dict["neural_points.xyz"]
+        self.points_embeding = state_dict["neural_points.points_embeding"]
+        self.points_conf = state_dict["neural_points.points_conf"]
+        self.points_dir = state_dict["neural_points.points_dir"]
+        self.points_color = state_dict["neural_points.points_color"]
+        self.Rw2c = state_dict["neural_points.Rw2c"]
+
     # dont know
     # Just to allow for size reduction of the checkpoint
     def load_state_dict(self, state_dict, strict: bool = True):
@@ -377,6 +425,7 @@ class PointNerf(Model):
             for k, v in self.lpips_vgg.state_dict().items():
                 state_dict[f"lpips_vgg.{k}"] = v
         return super().load_state_dict(state_dict, strict)
+
     # dont know
     # Just to allow for size reduction of the checkpoint
     def state_dict(self, *args, prefix="", **kwargs):

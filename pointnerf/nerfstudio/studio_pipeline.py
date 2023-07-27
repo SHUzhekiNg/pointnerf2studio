@@ -1,6 +1,7 @@
 import typing
-
+from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
 from ..data.studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
+from torch.cuda.amp.grad_scaler import GradScaler
 from nerfstudio.pipelines.base_pipeline import (
     DDP,
     Model,
@@ -20,11 +21,20 @@ class PointNerfPipeline(VanillaPipeline):
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
         local_rank: int = 0,
+        grad_scaler: typing.Optional[GradScaler] = None,
     ):
         Pipeline.__init__(self)
         self.config = config
         self.test_mode = test_mode
-        self.datamanager: PointNerfDataManager = config.datamanager.setup(
+
+        # self.datamanager: PointNerfDataManager = config.datamanager.setup(
+        #     device=device,
+        #     test_mode=test_mode,
+        #     world_size=world_size,
+        #     local_rank=local_rank,
+        # )
+
+        self.datamanager: VanillaDataManager = config.datamanager.setup(
             device=device,
             test_mode=test_mode,
             world_size=world_size,

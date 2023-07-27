@@ -1,5 +1,5 @@
 import importlib
-from models.base_model import BaseModel
+from .base_model import BaseModel
 
 
 def find_model_class_by_name(model_name):

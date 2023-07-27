@@ -2,7 +2,7 @@ import importlib
 import torch.utils.data
 import sys
 sys.path.append("../")
-from utils.ncg_string import underscore2camelcase
+from pointnerf.utils.ncg_string import underscore2camelcase
 from .base_dataset import BaseDataset
 import numpy as np
 import time

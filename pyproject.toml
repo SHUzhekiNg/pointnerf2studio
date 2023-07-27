@@ -14,8 +14,8 @@ dependencies=[
 ]
 
 [tool.setuptools.packages.find]
-include = [".*"]
+include = ["pointnerf*"]
 
 [project.entry-points.'nerfstudio.method_configs']
-pointnerf2studio = '.nerfstudio.studio_config:run_method'
+pointnerf2studio = 'pointnerf.nerfstudio.studio_config:pointnerf_original'
 
