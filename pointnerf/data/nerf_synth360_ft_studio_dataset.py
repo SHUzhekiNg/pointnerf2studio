@@ -526,6 +526,7 @@ class NerfSynth360FtStudioDataset(BaseDataset):
             px, py = np.meshgrid(
                 np.arange(indx, indx + subsamplesize).astype(np.float32),
                 np.arange(indy, indy + subsamplesize).astype(np.float32))
+        # used
         elif self.opt.random_sample == "random":
             px = np.random.randint(0,
                                    width,
@@ -535,6 +536,7 @@ class NerfSynth360FtStudioDataset(BaseDataset):
                                    height,
                                    size=(subsamplesize,
                                          subsamplesize)).astype(np.float32)
+        
         elif self.opt.random_sample == "random2":
             px = np.random.uniform(0,
                                    width - 1e-5,

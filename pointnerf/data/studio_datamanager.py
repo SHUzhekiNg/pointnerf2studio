@@ -52,13 +52,13 @@ class PointNerfDataManagerConfig(VanillaDataManagerConfig):
 
     # from nerf_synth360_ft_dataset.parser
     random_sample: str = "none"     # random sample pixels
-    random_sample_size: int = 1024  # number of random samples
+    random_sample_size: int = 70  # number of random samples
     init_view_num: int = 3          # number of random samples
     shape_id: int = 0               # shape id
     trgt_id: int = 0                # shape id
     num_nn: int = 1                 # number of nearest views in a batch
-    near_plane: float = 2.125       # Near clipping plane, by default it is computed according to the distance of the camera 
-    far_plane: float = 4.525        # Far clipping plane, by default it is computed according to the distance of the camera
+    near_plane: float = 2.0       # Near clipping plane, by default it is computed according to the distance of the camera 
+    far_plane: float = 6.0        # Far clipping plane, by default it is computed according to the distance of the camera
     bg_color: str = "white"         # background color, white|black(None)|random|rgb (float, float, float)
     bg_filtering: int = 0           # 0 for alpha channel filtering, 1 for background color filtering
     scan: str = "scan1"
@@ -121,7 +121,7 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         #     dataparser_scale=self.scale_factor,
         # )
 
-        config
+        # config
 
 
 
@@ -156,16 +156,16 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
 
     def next_train(self, step: int) -> Tuple[RayBundle, Dict]:
         """Returns the next batch of data from the train dataloader."""
-        # self.train_count += 1
-        # image_batch = next(self.iter_train_image_dataloader)
-        # assert self.train_pixel_sampler is not None
-        # batch = self.train_pixel_sampler.sample(image_batch)
-        # ray_indices = batch["indices"]
-        # ray_bundle = self.train_ray_generator(ray_indices)
+        self.train_count += 1
+        image_batch = next(self.iter_train_image_dataloader)
+        assert self.train_pixel_sampler is not None
+        batch = self.train_pixel_sampler.sample(image_batch)
+        ray_indices = batch["indices"]
+        ray_bundle = self.train_ray_generator(ray_indices)
         # batch["clip"], clip_scale = self.clip_interpolator(ray_indices)
         # batch["dino"] = self.dino_dataloader(ray_indices)
         # ray_bundle.metadata["clip_scales"] = clip_scale
-        # # assume all cameras have the same focal length and image width
-        # ray_bundle.metadata["fx"] = self.train_dataset.cameras[0].fx.item()
-        # ray_bundle.metadata["width"] = self.train_dataset.cameras[0].width.item()
-        # return ray_bundle, batch
+        # assume all cameras have the same focal length and image width
+        ray_bundle.metadata["fx"] = self.train_dataset.cameras[0].fx.item()
+        ray_bundle.metadata["width"] = self.train_dataset.cameras[0].width.item()
+        return ray_bundle, batch

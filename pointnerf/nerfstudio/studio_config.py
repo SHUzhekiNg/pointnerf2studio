@@ -11,28 +11,29 @@ from nerfstudio.plugins.types import MethodSpecification
 
 from .studio_model import PointNerf, PointNerfConfig
 from .studio_pipeline import PointNerfPipeline
-from ..data.studio_datamanager import PointNerfDataManagerConfig
+from ..data.studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
 
 pointnerf_config = TrainerConfig(
     method_name="pointnerf-original",
     pipeline=VanillaPipelineConfig(
         _target=PointNerfPipeline,
-        datamanager=VanillaDataManagerConfig(
-            # _target=RayPruningDataManager,
-            dataparser=MinimalDataParserConfig(),
-            eval_num_rays_per_batch=4096,
-            train_num_rays_per_batch=4096,
-        ),
-        # datamanager=PointNerfDataManagerConfig(
-        #     dataparser=BlenderDataParserConfig(),
-        #     eval_num_rays_per_batch=400,
-        #     train_num_rays_per_batch=400,
+        # datamanager=VanillaDataManagerConfig(
+        #     # _target=RayPruningDataManager,
+        #     dataparser=MinimalDataParserConfig(),
+        #     eval_num_rays_per_batch=4096,
+        #     train_num_rays_per_batch=4096,
         # ),
+        datamanager=PointNerfDataManagerConfig(
+            _target=PointNerfDataManager,
+            dataparser=MinimalDataParserConfig(),
+            eval_num_rays_per_batch=400,
+            train_num_rays_per_batch=400,
+        ),
         model=PointNerfConfig(
         	_target=PointNerf
     	),
     ),
-    max_num_iterations=300000,
+    max_num_iterations=200000,
     steps_per_save=25000,
     steps_per_eval_batch=1000,
     steps_per_eval_image=2000,

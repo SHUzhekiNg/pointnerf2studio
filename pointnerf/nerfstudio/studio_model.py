@@ -219,8 +219,9 @@ class PointNerf(Model):
     def __init__(
         self,
         config: PointNerfConfig,
-        # dataparser_transform=None,
-        # dataparser_scale=None,
+        dataparser_transform=None,
+        dataparser_scale=None,
+        cameras=None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -228,7 +229,11 @@ class PointNerf(Model):
             **kwargs,
         )
         self._point_initialized = False
+        self.dataparser_transform = dataparser_transform
+        self.dataparser_scale = dataparser_scale
+        self.cameras = cameras
         self._init_pointnerf()
+        
 
 
     # TODO:
@@ -241,21 +246,22 @@ class PointNerf(Model):
             if len([n for n in glob.glob(str(self.config.path_point_cloud) + "/*_net_ray_marching.pth") if os.path.isfile(n)]) == 0:
                 raise RuntimeError(f"Cannot find any _net_ray_marching.pth in {self.config.path_point_cloud}")
 
-            best_PSNR=0.0
-            best_iter=0
+            # best_PSNR=0.0
+            # best_iter=0
             resume_iter = get_latest_epoch(self.config.path_point_cloud)
-            states = torch.load(
-                os.path.join(self.config.path_point_cloud, '{}_states.pth'.format(resume_iter)), map_location=torch.device("cuda"))
-            epoch_count = states['epoch_count']
-            total_steps = states['total_steps']
-            best_PSNR = states['best_PSNR'] if 'best_PSNR' in states else best_PSNR
-            best_iter = states['best_iter'] if 'best_iter' in states else best_iter
-            best_PSNR = best_PSNR.item() if torch.is_tensor(best_PSNR) else best_PSNR
-            CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-            CONSOLE.print('Continue training from {} epoch'.format(resume_iter))
-            CONSOLE.print(f"Iter: {total_steps}")
-            CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-            del states
+            # states = torch.load(
+            #     os.path.join(self.config.path_point_cloud, '{}_states.pth'.format(resume_iter)), map_location=torch.device("cuda"))
+            # epoch_count = states['epoch_count']
+            # total_steps = states['total_steps']
+            # best_PSNR = states['best_PSNR'] if 'best_PSNR' in states else best_PSNR
+            # best_iter = states['best_iter'] if 'best_iter' in states else best_iter
+            # best_PSNR = best_PSNR.item() if torch.is_tensor(best_PSNR) else best_PSNR
+            # CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+            # CONSOLE.print('Continue training from {} epoch'.format(resume_iter))
+            # CONSOLE.print(f"Iter: {total_steps}")
+            # CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+            # del states
+
             # opt.mode = 2
             # opt.load_points=1  # ?????
             # opt.resume_iter = resume_iter
@@ -264,7 +270,7 @@ class PointNerf(Model):
 
             load_filename = '{}_net_ray_marching.pth'.format(resume_iter)
             load_path = os.path.join(self.config.path_point_cloud, load_filename)
-            print('loading', load_filename, " from ", load_path)
+            CONSOLE.print('loading', load_filename, " from ", load_path)
             if not os.path.isfile(load_path):
                 raise RuntimeError(f'cannot load {load_filename}')
             state_dict = torch.load(load_path, map_location=self.device)
@@ -274,6 +280,8 @@ class PointNerf(Model):
             if isinstance(self, nn.DataParallel):
                 self = self.module
             self.load_state_dict_from_init(state_dict)
+            # self.update_to_step(total_steps)
+            # if self.config.maximum_step is not None and total_steps >= self.config.maximum_step:
 
             self._point_initialized = True
         else:
@@ -380,33 +388,33 @@ class PointNerf(Model):
 
 
     def load_state_dict_from_init(self, state_dict, strict: bool = True):
-        # block1 -> mlp_base
-        self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
-        self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
-        self.mlp_base.layers[1].weight.data = state_dict["aggregator.block1.2.weight"]
-        self.mlp_base.layers[1].bias.data = state_dict["aggregator.block1.2.bias"]
+        # # block1 -> mlp_base
+        # self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
+        # self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
+        # self.mlp_base.layers[1].weight.data = state_dict["aggregator.block1.2.weight"]
+        # self.mlp_base.layers[1].bias.data = state_dict["aggregator.block1.2.bias"]
 
-        # block3 -> mlp_head
-        self.mlp_head.layers[0].weight.data = state_dict["aggregator.block3.0.weight"]
-        self.mlp_head.layers[0].bias.data = state_dict["aggregator.block3.0.bias"]
-        self.mlp_head.layers[1].weight.data = state_dict["aggregator.block3.2.weight"]
-        self.mlp_head.layers[1].bias.data = state_dict["aggregator.block3.2.bias"]
+        # # block3 -> mlp_head
+        # self.mlp_head.layers[0].weight.data = state_dict["aggregator.block3.0.weight"]
+        # self.mlp_head.layers[0].bias.data = state_dict["aggregator.block3.0.bias"]
+        # self.mlp_head.layers[1].weight.data = state_dict["aggregator.block3.2.weight"]
+        # self.mlp_head.layers[1].bias.data = state_dict["aggregator.block3.2.bias"]
 
-        # color_branch -> mlp_color
-        self.mlp_color.layers[0].weight.data = state_dict["aggregator.color_branch.0.weight"]
-        self.mlp_color.layers[0].bias.data = state_dict["aggregator.color_branch.0.bias"]
-        self.mlp_color.layers[1].weight.data = state_dict["aggregator.color_branch.2.weight"]
-        self.mlp_color.layers[1].bias.data = state_dict["aggregator.color_branch.2.bias"]
-        self.mlp_color.layers[2].weight.data = state_dict["aggregator.color_branch.4.weight"]
-        self.mlp_color.layers[2].bias.data = state_dict["aggregator.color_branch.4.bias"]
+        # # color_branch -> mlp_color
+        # self.mlp_color.layers[0].weight.data = state_dict["aggregator.color_branch.0.weight"]
+        # self.mlp_color.layers[0].bias.data = state_dict["aggregator.color_branch.0.bias"]
+        # self.mlp_color.layers[1].weight.data = state_dict["aggregator.color_branch.2.weight"]
+        # self.mlp_color.layers[1].bias.data = state_dict["aggregator.color_branch.2.bias"]
+        # self.mlp_color.layers[2].weight.data = state_dict["aggregator.color_branch.4.weight"]
+        # self.mlp_color.layers[2].bias.data = state_dict["aggregator.color_branch.4.bias"]
 
-        # color_branch.6 -> field_output_color
-        self.field_output_color.net.weight.data = state_dict["aggregator.color_branch.6.weight"]
-        self.field_output_color.net.bias.data = state_dict["aggregator.color_branch.6.bias"]
+        # # color_branch.6 -> field_output_color
+        # self.field_output_color.net.weight.data = state_dict["aggregator.color_branch.6.weight"]
+        # self.field_output_color.net.bias.data = state_dict["aggregator.color_branch.6.bias"]
 
-        # alpha_branch.0 -> field_output_density
-        self.field_output_density.net.weight.data = state_dict["aggregator.alpha_branch.0.weight"]
-        self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
+        # # alpha_branch.0 -> field_output_density
+        # self.field_output_density.net.weight.data = state_dict["aggregator.alpha_branch.0.weight"]
+        # self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
 
         # neural points
         self.points_xyz = state_dict["neural_points.xyz"]
@@ -452,132 +460,7 @@ class PointNerf(Model):
         if self.mlp_base is None:
             raise ValueError("populate_fields() must be called before get_outputs")
 
-        tracer = self.get_tetrahedra_tracer()
-        tracer_output = tracer.trace_rays(
-            ray_bundle.origins.contiguous(),
-            ray_bundle.directions.contiguous(),
-            self.config.max_intersected_triangles,
-        )
-        num_visited_cells = tracer_output["num_visited_cells"]
-        nears = tracer_output["hit_distances"][:, 0, 0][:, None]
-        fars = torch.gather(
-            tracer_output["hit_distances"][:, :, 1],
-            1,
-            (num_visited_cells[:, None].long() - 1).clamp_min_(0),
-        )
-
-        # Reduce everything to nonempty rays
-        ray_mask = tracer_output["num_visited_cells"] > 0
-        nears_r = nears[ray_mask]
-        fars_r = fars[ray_mask]
-        if nears_r.shape[0] > 0:
-            ray_bundle_modified_r = dataclasses.replace(ray_bundle[ray_mask], nears=nears_r, fars=fars_r)
-
-            # Apply biased sampling
-            if isinstance(self.sampler_uniform, TetrahedraSampler):
-                ray_samples_r: RaySamples = self.sampler_uniform(
-                    ray_bundle_modified_r,
-                    num_visited_cells=tracer_output["num_visited_cells"][ray_mask],
-                    hit_distances=tracer_output["hit_distances"][ray_mask],
-                )
-            else:
-                ray_samples_r: RaySamples = self.sampler_uniform(ray_bundle_modified_r)
-            distances_r = (ray_samples_r.frustums.ends + ray_samples_r.frustums.starts) / 2
-
-            # Trace matched cells and interpolate field
-            traced_cells = tracer.find_visited_cells(
-                tracer_output["num_visited_cells"][ray_mask],
-                tracer_output["visited_cells"][ray_mask],
-                tracer_output["barycentric_coordinates"][ray_mask],
-                tracer_output["hit_distances"][ray_mask],
-                distances_r.squeeze(-1),
-            )
-            barycentric_coords = traced_cells["barycentric_coordinates"]
-            field_values = interpolate_values(
-                traced_cells["vertex_indices"],
-                barycentric_coords,
-                self.tetrahedra_field,
-            )
-
-            if self.config.num_fine_samples > 0:
-                # apply MLP on top
-                encoded_abc = self.position_encoding(field_values)
-                base_mlp_out = self.mlp_base(encoded_abc)
-
-                # Apply dense, fine sampling
-                density_coarse = self.field_output_density(base_mlp_out)
-                weights = ray_samples_r.get_weights(density_coarse)
-                # pdf sampling
-                ray_samples_r = self.sampler_pdf(ray_bundle_modified_r, ray_samples_r, weights)
-                distances_r = (ray_samples_r.frustums.ends + ray_samples_r.frustums.starts) / 2
-
-                traced_cells = tracer.find_visited_cells(
-                    tracer_output["num_visited_cells"][ray_mask],
-                    tracer_output["visited_cells"][ray_mask],
-                    tracer_output["barycentric_coordinates"][ray_mask],
-                    tracer_output["hit_distances"][ray_mask],
-                    distances_r.squeeze(-1),
-                )
-                barycentric_coords = traced_cells["barycentric_coordinates"]
-                field_values = interpolate_values(
-                    traced_cells["vertex_indices"],
-                    barycentric_coords,
-                    self.tetrahedra_field,
-                )
-
-            encoded_abc = self.position_encoding(field_values)
-            base_mlp_out = self.mlp_base(encoded_abc)
-
-            field_outputs = {}
-            field_outputs[self.field_output_density.field_head_name] = self.field_output_density(base_mlp_out)
-            encoded_dir = self.direction_encoding(ray_samples_r.frustums.directions)
-            mlp_out = self.mlp_head(torch.cat([encoded_dir, base_mlp_out], dim=-1))  # type: ignore
-            field_outputs[self.field_output_color.field_head_name] = self.field_output_color(mlp_out)
-
-            colors = field_outputs[FieldHeadNames.RGB]
-            sigmas = field_outputs[FieldHeadNames.DENSITY]
-            if self.config.use_gradient_scaling:
-                # NOTE: we multiply the ray distance by 2 because according to the
-                # Radiance Field Gradient Scaling for Unbiased Near-Camera Training
-                # paper, it is the distance to the object center
-                ray_dist = ray_samples_r.spacing_ends + ray_samples_r.spacing_starts
-                colors, sigmas, ray_dist = GradientScaler.apply(colors, sigmas, ray_dist)
-
-            weights = ray_samples_r.get_weights(sigmas)
-            rgb_r = self.renderer_rgb(
-                rgb=colors,
-                weights=weights,
-            )
-            accumulation_r = self.renderer_accumulation(weights)
-            depth_r = self.renderer_depth(weights, ray_samples_r)
-
-        # Expand rendered values back to the original shape
-        device = ray_mask.device
-        rgb = (
-            self.get_background_color()
-            .to(device=device, dtype=torch.float32)
-            .view(1, 3)
-            .repeat_interleave(ray_mask.shape[0], 0)
-        )
-        # rgb = torch.zeros((ray_mask.shape[0], 3), dtype=torch.float32, device=device)
-        accumulation = torch.zeros((ray_mask.shape[0], 1), dtype=torch.float32, device=device)
-        depth = torch.full(
-            (ray_mask.shape[0], 1),
-            self.collider.far_plane,
-            dtype=torch.float32,
-            device=device,
-        )
-        if nears_r.shape[0] > 0:
-            rgb[ray_mask] = rgb_r
-            accumulation[ray_mask] = accumulation_r
-            depth[ray_mask] = depth_r
-
-        outputs = {
-            "rgb": rgb,
-            "accumulation": accumulation,
-            "depth": depth,
-            "ray_mask": ray_mask,
-        }
+        
         return outputs
 
     # pylint: disable=unused-argument
