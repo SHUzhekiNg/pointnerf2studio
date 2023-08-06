@@ -311,6 +311,7 @@ def near_far_linear_ray_generation(campos,
     # print("raydir", raydir.shape)
     tvals = torch.linspace(0, 1, point_count + 1,
                            device=campos.device).view(1, -1)
+    # spacing_to_euclidean_fn = lambda x: x * s_far + (1 - x) * s_near
     tvals = near * (1 - tvals) + far * tvals  # N x 1 x Sammples
     segment_length = (tvals[..., 1:] -
                       tvals[..., :-1]) * (1 + jitter * (torch.rand(
@@ -334,6 +335,49 @@ def near_far_linear_ray_generation(campos,
     segment_length*=torch.linalg.norm(raydir[..., None, :], axis=-1)
     return raypos, segment_length, valid, middle_point_ts
 
+def near_far_linear_ray_generation_studio(campos,
+                                   raydir,
+                                   point_count,
+                                   near=0.1,
+                                   far=10,
+                                   jitter=0.,
+                                   **kargs):
+    # inputs
+    # campos: N x 3
+    # raydir: N x Rays x 3, must be normalized
+    # near: N x 1 x 1
+    # far:  N x 1 x 1
+    # jitter: float in [0, 1), a fraction of step length
+    # outputs
+    # raypos: N x Rays x Samples x 3
+    # segment_length: N x Rays x Samples
+    # valid: N x Rays x Samples
+    # ts: N x Rays x Samples
+    # print("campos", campos.shape)
+    # print("raydir", raydir.shape)
+    tvals = torch.linspace(0, 1, point_count + 1,
+                           device=campos.device).view(1, -1)
+    # spacing_to_euclidean_fn = lambda x: x * s_far + (1 - x) * s_near
+    tvals = near * (1 - tvals) + far * tvals  # N x 1 x Sammples
+    segment_length = (tvals[..., 1:] -
+                      tvals[..., :-1]) * (1 + jitter * (torch.rand(
+                          (raydir.shape[0], point_count),
+                          device=campos.device) - 0.5))
+
+    end_point_ts = torch.cumsum(segment_length, dim=1)
+    end_point_ts = torch.cat([
+        torch.zeros((end_point_ts.shape[0], 1),
+                    device=end_point_ts.device), end_point_ts
+    ], dim=1)
+    end_point_ts = near + end_point_ts
+
+    middle_point_ts = (end_point_ts[ :, :-1] + end_point_ts[ :, 1:]) / 2
+    raypos = campos[:, None, None, :] + raydir[None, :, None, :] * middle_point_ts[None, :, :, None]
+    valid = torch.ones_like(middle_point_ts,
+                            dtype=middle_point_ts.dtype,
+                            device=middle_point_ts.device)
+
+    return raypos, valid, middle_point_ts
 
 
 def refine_ray_generation(campos,

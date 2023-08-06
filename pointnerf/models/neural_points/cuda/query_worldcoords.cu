@@ -303,7 +303,7 @@ __global__ void query_neigh_along_ray_layered(
 
 
 std::vector<torch::Tensor> woord_query_grid_point_index_cuda(
-    torch::Tensor pixel_idx_tensor, torch::Tensor raypos_tensor, torch::Tensor point_xyz_w_tensor, torch::Tensor actual_numpoints_tensor, torch::Tensor kernel_size, torch::Tensor query_size, const int SR, const int K, int R, const int D, torch::Tensor scaled_vdim, const int max_o, const int P, const float radius_limit, torch::Tensor ranges, torch::Tensor scaled_vsize, const int kMaxThreadsPerBlock, const int NN) {
+    torch::Tensor raypos_tensor, torch::Tensor point_xyz_w_tensor, torch::Tensor actual_numpoints_tensor, torch::Tensor kernel_size, torch::Tensor query_size, const int SR, const int K, int R, const int D, torch::Tensor scaled_vdim, const int max_o, const int P, const float radius_limit, torch::Tensor ranges, torch::Tensor scaled_vsize, const int kMaxThreadsPerBlock, const int NN) {
 
   const int B = point_xyz_w_tensor.size(0);
   const int N = point_xyz_w_tensor.size(1);

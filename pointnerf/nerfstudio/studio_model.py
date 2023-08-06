@@ -32,14 +32,23 @@ from rich.console import Console
 from skimage.metrics import structural_similarity
 from torch import nn
 from torch.nn import Parameter
+from torch.utils.cpp_extension import load as load_cuda
 from torchmetrics import PeakSignalNoiseRatio
 from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 # from ..utils.extension import TetrahedraTracer, interpolate_values
 from ..models.helpers.networks import PointNeRFEncoding
-
+from ..models.rendering.diff_ray_marching import near_far_linear_ray_generation_studio, near_far_linear_ray_generation
 CONSOLE = Console(width=120)
+
+# TODO:
+query_worldcoords_cuda = load_cuda(
+    name='query_worldcoords_cuda',
+    sources=[
+        os.path.join("/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/models/neural_points", path)
+        for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
+    verbose=True)
 
 
 def skimage_ssim(image, rgb):
@@ -81,7 +90,6 @@ class PointNerfConfig(ModelConfig):
     point_color_mode: Optional[bool] = True  # False for only at features, True for color branch
     point_dir_mode: Optional[bool] = True
 
-    max_intersected_triangles: int = 512  # TODO: try 1024
     num_samples: int = 80
     num_fine_samples: int = 256
     use_biased_sampler: bool = False
@@ -94,11 +102,25 @@ class PointNerfConfig(ModelConfig):
     hidden_size: int = 256
     hidden_size_color: int = 128
 
-    input_fourier_frequencies: int = 0
+    """USED PARAMS"""
+    apply_pnt_mask: bool = True
+    act_super: bool = True
+    axis_weight: List[float] = dataclasses.field(default_factory=lambda: [1., 1., 1.])
+    kernel_size: List[int] = dataclasses.field(default_factory=lambda: [3, 3, 3])
+    vscale: List[float] = dataclasses.field(default_factory=lambda: [2, 2, 2])
+    vsize: List[float] = dataclasses.field(default_factory=lambda: [0.004, 0.004, 0.004])
+    query_size: List[float] = dataclasses.field(default_factory=lambda: [3, 3, 3])
+    ranges: List[float] = dataclasses.field(default_factory=lambda: [-0.721, -0.695, -0.995, 0.658, 0.706, 1.050])
+    z_depth_dim: int = 400  # num_coarse_sample
 
-    initialize_colors: bool = True
-    use_gradient_scaling: bool = False
-    """Use gradient scaler where the gradients are lower for points closer to the camera."""
+    
+    # "query"
+    SR: int = 80
+    K: int = 8
+    max_o: int = 410000
+    P: int = 12
+    NN: int = 2
+    gpu_maxthr: int = 1024 # 'number of coarse samples'
 
     def __post_init__(self):
         if self.path_point_cloud is not None and self.num_tetrahedra_vertices is None:
@@ -232,11 +254,9 @@ class PointNerf(Model):
         self.dataparser_transform = dataparser_transform
         self.dataparser_scale = dataparser_scale
         self.cameras = cameras
+        self._device = "cuda"
         self._init_pointnerf()
         
-
-
-    # TODO:
     # load essential running things. (nerual point cloud)
     def _init_pointnerf(self):
         if self.config.path_point_cloud is not None:
@@ -245,75 +265,31 @@ class PointNerf(Model):
             # init
             if len([n for n in glob.glob(str(self.config.path_point_cloud) + "/*_net_ray_marching.pth") if os.path.isfile(n)]) == 0:
                 raise RuntimeError(f"Cannot find any _net_ray_marching.pth in {self.config.path_point_cloud}")
-
-            # best_PSNR=0.0
-            # best_iter=0
             resume_iter = get_latest_epoch(self.config.path_point_cloud)
-            # states = torch.load(
-            #     os.path.join(self.config.path_point_cloud, '{}_states.pth'.format(resume_iter)), map_location=torch.device("cuda"))
-            # epoch_count = states['epoch_count']
-            # total_steps = states['total_steps']
-            # best_PSNR = states['best_PSNR'] if 'best_PSNR' in states else best_PSNR
-            # best_iter = states['best_iter'] if 'best_iter' in states else best_iter
-            # best_PSNR = best_PSNR.item() if torch.is_tensor(best_PSNR) else best_PSNR
-            # CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-            # CONSOLE.print('Continue training from {} epoch'.format(resume_iter))
-            # CONSOLE.print(f"Iter: {total_steps}")
-            # CONSOLE.print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-            # del states
-
-            # opt.mode = 2
-            # opt.load_points=1  # ?????
-            # opt.resume_iter = resume_iter
-            # opt.is_train=True
-            # model = create_model(opt)
-
             load_filename = '{}_net_ray_marching.pth'.format(resume_iter)
             load_path = os.path.join(self.config.path_point_cloud, load_filename)
             CONSOLE.print('loading', load_filename, " from ", load_path)
             if not os.path.isfile(load_path):
                 raise RuntimeError(f'cannot load {load_filename}')
             state_dict = torch.load(load_path, map_location=self.device)
-            # if resume_iter=="best" and name == "ray_marching" and self.opt.default_conf > 0.0 and self.opt.default_conf <= 1.0 and self.neural_points.points_conf is not None:
-            #     assert "neural_points.points_conf" not in state_dict
-            #     state_dict["neural_points.points_conf"] = torch.ones_like(self.net_ray_marching.module.neural_points.points_conf) * self.opt.default_conf
             if isinstance(self, nn.DataParallel):
                 self = self.module
             self.load_state_dict_from_init(state_dict)
-            # self.update_to_step(total_steps)
-            # if self.config.maximum_step is not None and total_steps >= self.config.maximum_step:
-
             self._point_initialized = True
         else:
             raise RuntimeError("The point_cloud_path must be specified.")
 
-
-    # optional.
-    # def get_tetrahedra_tracer(self):
-    #     device = self.tetrahedra_field.device
-    #     if device.type != "cuda":
-    #         raise RuntimeError("Tetrahedra tracer is only supported on a CUDA device")
-    #     if self._tetrahedra_tracer is not None:
-    #         if self._tetrahedra_tracer.device == device:
-    #             return self._tetrahedra_tracer
-    #         del self._tetrahedra_tracer
-    #         self._tetrahedra_tracer = None
-    #     if not self._point_initialized:
-    #         self._init_pointnerf()
-    #     self._tetrahedra_tracer = TetrahedraTracer(device)
-    #     self._tetrahedra_tracer.load_tetrahedra(self.tetrahedra_vertices, self.tetrahedra_cells)
-    #     return self._tetrahedra_tracer
 
     def populate_modules(self):
         """Set the fields and modules"""
         super().populate_modules()
 
         # fields
-        self.position_encoding = PointNeRFEncoding(  # NeRFEncoding
-            in_dim=2,
-            num_frequencies=self.config.num_pos_freqs, # 10
-            ori=False
-        )
+        # self.position_encoding = PointNeRFEncoding(  # NeRFEncoding
+        #     in_dim=2,
+        #     num_frequencies=self.config.num_pos_freqs, # 10
+        #     ori=False
+        # )
         self.direction_encoding = PointNeRFEncoding(  # NeRFEncoding
             in_dim=2,
             num_frequencies=self.config.num_viewdir_freqs,  # 4
@@ -364,6 +340,10 @@ class PointNerf(Model):
         self.field_output_color = RGBFieldHead(in_dim=self.mlp_color.get_out_dim())
         self.field_output_density = DensityFieldHead(in_dim=self.mlp_head.get_out_dim())
 
+        self.density_super_act = torch.nn.Softplus()
+        self.density_act = torch.nn.ReLU()
+        self.color_act = torch.nn.Sigmoid()
+
         # TODO: samplers
         self.sampler_uniform = PointNerfSampler(num_samples=self.config.num_samples)
         # if self.config.num_fine_samples > 0:
@@ -387,7 +367,7 @@ class PointNerf(Model):
         self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
 
 
-    def load_state_dict_from_init(self, state_dict, strict: bool = True):
+    def load_state_dict_from_init(self, state_dict):
         # # block1 -> mlp_base
         # self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
         # self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
@@ -459,8 +439,224 @@ class PointNerf(Model):
     def get_outputs(self, ray_bundle: RayBundle):
         if self.mlp_base is None:
             raise ValueError("populate_fields() must be called before get_outputs")
+        self.vscale_np = np.array(self.config.vscale, dtype=np.int32)
+        self.scaled_vsize_np = (self.config.vsize * self.vscale_np).astype(np.float32)
+        # pixel_idx_tensor = ray_bundle.metadata["pixel_idx"].to(torch.int32)  # sb xiede 
+        cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0)   # torch.Size([1, 3, 3])
+        cam_pos_tensor = ray_bundle.origins[0].unsqueeze(0)              # torch.Size([1, 3])
+        ray_dirs_tensor = ray_bundle.directions.unsqueeze(0)             # torch.Size([1, 4900, 3])
+        near_depth = ray_bundle.nears[0].item()                          # float
+        far_depth = ray_bundle.fars[0].item()                            # float
+        # intrinsic = inputs["intrinsic"].cpu().numpy()
+
+        # TODO: turn to nerfstudio.
+        # raypos = campos[:, None, None, :] + raydir[:, :, None, :] * middle_point_ts[:, :, :, None]
+        raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.config.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3)
 
         
+        point_xyz_w_tensor = self.points_xyz[None,...]
+        actual_numpoints_tensor = torch.ones([point_xyz_w_tensor.shape[0]], device=point_xyz_w_tensor.device, dtype=torch.int32) * point_xyz_w_tensor.shape[1]
+        ranges_tensor, vsize_np, scaled_vdim_np = self.get_hyperparameters(self.config.vsize, point_xyz_w_tensor, ranges=self.config.ranges)
+
+        D = raypos_tensor.shape[2]
+        R = ray_dirs_tensor.shape[1]
+
+        kernel_size_tensor = torch.as_tensor(self.config.kernel_size, device=self._device, dtype=torch.int32)
+        query_size_tensor = torch.as_tensor(self.config.query_size, device=self._device, dtype=torch.int32)
+        # radius_limit_scale == 4 
+        radius_limit_np = np.asarray(4 * max(self.config.vsize[0], self.config.vsize[1])).astype(np.float32)
+        self.scaled_vsize_tensor = torch.as_tensor(self.scaled_vsize_np, device=self._device)
+
+        # sample_pidx_tensor: B, R, SR, K
+        sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = \
+            query_worldcoords_cuda.woord_query_grid_point_index(raypos_tensor,
+                                                                point_xyz_w_tensor,
+                                                                actual_numpoints_tensor,
+                                                                kernel_size_tensor,
+                                                                query_size_tensor,
+                                                                self.config.SR,
+                                                                self.config.K,
+                                                                R, D,
+                                                                torch.as_tensor(scaled_vdim_np,device=self._device),
+                                                                self.config.max_o,
+                                                                self.config.P,
+                                                                radius_limit_np,
+                                                                ranges_tensor,
+                                                                self.scaled_vsize_tensor,
+                                                                self.config.gpu_maxthr,
+                                                                self.config.NN)
+
+        sample_ray_dirs_tensor = torch.masked_select(ray_dirs_tensor, ray_mask_tensor[..., None]>0).reshape(ray_dirs_tensor.shape[0],-1,3)[...,None,:].expand(-1, -1, self.config.SR, -1).contiguous()
+
+        sample_pnt_mask = sample_pidx_tensor >= 0
+        B, R, SR, K = sample_pidx_tensor.shape
+        sample_pidx_tensor = torch.clamp(sample_pidx_tensor, min=0).view(-1).long()
+
+
+        sample_loc_tensor = self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor)  # 
+        point_xyz_pers_tensor = self.w2pers(self.points_xyz, cam_rot_tensor, cam_pos_tensor)  # 
+        sampled_embedding = torch.index_select(torch.cat([self.points_xyz[None, ...], point_xyz_pers_tensor, self.points_embeding], dim=-1), 1, sample_pidx_tensor).view(B, R, SR, K, self.points_embeding.shape[2]+self.points_xyz.shape[1]*2)
+
+        sampled_color = None if self.points_color is None else torch.index_select(self.points_color, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_color.shape[2])
+
+        sampled_dir = None if self.points_dir is None else torch.index_select(self.points_dir, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_dir.shape[2])
+
+        sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_conf.shape[2])
+
+        sampled_Rw2c = self.Rw2c if self.Rw2c.dim() == 2 else torch.index_select(self.Rw2c, 0, sample_pidx_tensor).view(B, R, SR, K, self.Rw2c.shape[1], self.Rw2c.shape[2])
+
+        sampled_xyz_pers = sampled_embedding[..., 3:6]
+        sampled_xyz = sampled_embedding[..., :3]
+        sampled_embedding = sampled_embedding[..., 6:]
+        
+        ray_valid = torch.any(sample_pnt_mask, dim=-1).view(-1)
+        total_len = len(ray_valid)
+        in_shape = sample_loc_w_tensor.shape
+
+        if sampled_xyz_pers.shape[1] > 0:
+            xdist = sampled_xyz_pers[..., 0] * sampled_xyz_pers[..., 2] - sample_loc_tensor[:, :, :, None, 0] * sample_loc_tensor[:, :, :, None, 2]
+            ydist = sampled_xyz_pers[..., 1] * sampled_xyz_pers[..., 2] - sample_loc_tensor[:, :, :, None, 1] * sample_loc_tensor[:, :, :, None, 2]
+            zdist = sampled_xyz_pers[..., 2] - sample_loc_tensor[:, :, :, None, 2]
+            dists = torch.stack([xdist, ydist, zdist], dim=-1)
+            dists = torch.cat([sampled_xyz - sample_loc_w_tensor[..., None, :], dists], dim=-1)
+        else:
+            B, R, SR, K, _ = sampled_xyz_pers.shape
+            dists = torch.zeros([B, R, SR, K, 6], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
+
+        # weight:              B x valid R x SR         (1 * R * 80 * 8)
+        # sampled_embedding:   B x valid R x SR x 32    (1 * R * 80 * 8 * 32)
+        weight, sampled_embedding = self.linear(sampled_embedding, dists, sample_pnt_mask, axis_weight=self.config.axis_weight)
+        weight = weight / torch.clamp(torch.sum(weight, dim=-1, keepdim=True), min=1e-8)
+        def gradiant_clamp(sampled_conf, min=0.0001, max=1):
+            diff = sampled_conf - torch.clamp(sampled_conf, min=min, max=max)
+            return sampled_conf - diff.detach()
+        conf_coefficient = gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)
+
+
+        # viewmlp
+        pnt_mask_flat = sample_pnt_mask.view(-1)
+        pts = sample_loc_w_tensor.view(-1, sample_loc_w_tensor.shape[-1])
+        viewdirs = sample_ray_dirs_tensor.view(-1, sample_ray_dirs_tensor.shape[-1])
+        B, R, SR, K, _ = dists.shape
+        sampled_Rw2c = sampled_Rw2c.transpose(-1, -2)
+        pts_ray, pts_pnt = None, None
+        viewdirs = viewdirs @ sampled_Rw2c
+        viewdirs = self.direction_encoding.forward(viewdirs)
+        ori_viewdirs, viewdirs = viewdirs[..., :3], viewdirs[..., 3:]
+        viewdirs = viewdirs[ray_valid, :]
+
+        dists_flat = dists.view(-1, dists.shape[-1])
+        if self.config.apply_pnt_mask > 0:
+            dists_flat = dists_flat[pnt_mask_flat, :]
+        # dists_flat /= (
+        #     1.0 if self.opt.dist_xyz_deno == 0. else float(self.opt.dist_xyz_deno * np.linalg.norm(vsize_np)))
+        dists_flat[..., :3] = dists_flat[..., :3] @ sampled_Rw2c
+        dists_flat = self.dists_encoding.forward(dists_flat)
+        feat= sampled_embedding.view(-1, sampled_embedding.shape[-1])
+        # print("feat", feat.shape)
+        feat = feat[pnt_mask_flat, :]
+        feat = torch.cat([feat, self.feature_encoding.forward(feat)], dim=-1)
+        feat = torch.cat([feat, dists_flat], dim=-1)
+        weight = weight.view(B * R * SR, K, 1)
+        pts = pts_pnt
+        # print("feat",feat.shape) # 501
+        feat = self.mlp_head(feat)
+
+
+        sampled_color = sampled_color.view(-1, sampled_color.shape[-1])
+        if self.config.apply_pnt_mask > 0:
+            sampled_color = sampled_color[pnt_mask_flat, :]
+        feat = torch.cat([feat, sampled_color], dim=-1)
+
+        sampled_dir = sampled_dir.view(-1, sampled_dir.shape[-1])
+        if self.config.apply_pnt_mask > 0:
+            sampled_dir = sampled_dir[pnt_mask_flat, :]
+            sampled_dir = sampled_dir @ sampled_Rw2c
+        ori_viewdirs = ori_viewdirs[..., None, :].repeat(1, K, 1).view(-1, ori_viewdirs.shape[-1])
+        if self.config.apply_pnt_mask > 0:
+            ori_viewdirs = ori_viewdirs[pnt_mask_flat, :]
+        feat = torch.cat([feat, sampled_dir - ori_viewdirs, torch.sum(sampled_dir*ori_viewdirs, dim=-1, keepdim=True)], dim=-1)
+        feat = self.mlp_base(feat)
+
+
+        alpha_in = feat
+        alpha = self.raw2out_density(self.field_output_density(alpha_in))
+        # print(alpha_in.shape, alpha_in)
+        if self.config.apply_pnt_mask > 0:
+            alpha_holder = torch.zeros([B * R * SR * K, alpha.shape[-1]], dtype=torch.float32, device=alpha.device)
+            alpha_holder[pnt_mask_flat, :] = alpha
+        else:
+            alpha_holder = alpha
+        alpha = alpha_holder.view(B * R * SR, K, alpha_holder.shape[-1])
+        alpha = torch.sum(alpha * weight, dim=-2).view([-1, alpha.shape[-1]])[ray_valid, :] # alpha:
+
+
+        if self.config.apply_pnt_mask > 0:
+            feat_holder = torch.zeros([B * R * SR * K, feat.shape[-1]], dtype=torch.float32, device=feat.device)
+            feat_holder[pnt_mask_flat, :] = feat
+        else:
+            feat_holder = feat
+        feat = feat_holder.view(B * R * SR, K, feat_holder.shape[-1])
+        feat = torch.sum(feat * weight, dim=-2).view([-1, feat.shape[-1]])[ray_valid, :]
+        
+        color_in = feat
+        color_in = torch.cat([color_in, viewdirs], dim=-1)
+        color_in = self.mlp_color(color_in)
+        color_output = self.raw2out_color(self.field_output_color(color_in))
+        output = torch.cat([alpha, color_output], dim=-1)
+
+
+        # print("output_placeholder", output_placeholder.shape)
+        # self.opt.shading_color_channel_num == 3
+        output_placeholder = torch.zeros([total_len, 3 + 1], dtype=torch.float32, device=output.device)
+        output_placeholder[ray_valid] = output
+
+        decoded_features = output.view(in_shape[:-1] + (3 + 1,))
+        ray_valid = ray_valid.view(in_shape[:-1])
+
+        ray_dist = torch.cummax(sample_loc_tensor[..., 2], dim=-1)[0]
+        ray_dist = torch.cat([ray_dist[..., 1:] - ray_dist[..., :-1], torch.full((ray_dist.shape[0], ray_dist.shape[1], 1), vsize_np[2], device=ray_dist.device)], dim=-1)
+
+        mask = ray_dist < 1e-8
+        # if self.opt.raydist_mode_unit > 0:
+        mask = torch.logical_or(mask, ray_dist > 2 * vsize_np[2])
+        mask = mask.to(torch.float32)
+        ray_dist = ray_dist * (1.0 - mask) + mask * vsize_np[2]
+        ray_dist *= ray_valid.float()
+
+        output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
+
+        (
+            ray_color,
+            point_color,
+            opacity,
+            acc_transmission,
+            blend_weight,
+            background_transmission,
+            _,
+        ) = self.ray_march(ray_dist, ray_valid, decoded_features, self._background_color)
+        # ray_color = self.tone_map(ray_color)
+        output["coarse_raycolor"] = ray_color
+        output["coarse_point_opacity"] = opacity
+        output["coarse_is_background"] = background_transmission
+        output["ray_mask"] = ray_mask_tensor
+        if weight is not None:
+            output["weight"] = weight.detach()
+            output["blend_weight"] = blend_weight.detach()
+            output["conf_coefficient"] = conf_coefficient
+
+        rgb_coarse = self.renderer_rgb(
+            rgb=ray_color,
+            weights=blend_weight,
+        )
+        accumulation_coarse = self.renderer_accumulation(blend_weight)
+        ##depth_coarse = self.renderer_depth(blend_weight, ray_samples_uniform)
+
+        outputs = {
+            "rgb": rgb_coarse,
+            "accumulation": accumulation_coarse
+        }
+
         return outputs
 
     # pylint: disable=unused-argument
@@ -513,3 +709,111 @@ class PointNerf(Model):
             "depth": combined_depth,
         }
         return metrics_dict, images_dict
+    
+    def w2pers(self, point_xyz, camrotc2w, campos):
+        point_xyz_shift = point_xyz[None, ...] - campos[:, None, :]
+        xyz = torch.sum(camrotc2w[:, None, :, :] * point_xyz_shift[:, :, :, None], dim=-2)
+        # print(xyz.shape, (point_xyz_shift[:, None, :] * camrot.T).shape)
+        xper = xyz[:, :, 0] / xyz[:, :, 2]
+        yper = xyz[:, :, 1] / xyz[:, :, 2]
+        return torch.stack([xper, yper, xyz[:, :, 2]], dim=-1)
+    
+    def linear(self, embedding, dists, pnt_mask, axis_weight=None):
+        # dists: B * R * SR * K * channel
+        # return B * R * SR * K
+        if axis_weight is None or (axis_weight[..., 0] == 1 and axis_weight[..., 2] ==1) :
+            weights = 1. / torch.clamp(torch.norm(dists[..., :3], dim=-1), min= 1e-6)
+        else:
+            weights = 1. / torch.clamp(torch.sqrt(torch.sum(torch.square(dists[...,:2]), dim=-1)) * axis_weight[..., 0] + torch.abs(dists[...,2]) * axis_weight[..., 1], min= 1e-6)
+        weights = pnt_mask * weights
+        return weights, embedding
+    
+    
+    def get_hyperparameters(self, vsize_np, point_xyz_w_tensor, ranges=None):
+        '''
+        :param l:
+        :param h:
+        :param w:
+        :param zdim:
+        :param ydim:
+        :param xdim:
+        :return:
+        '''
+        min_xyz, max_xyz = torch.min(point_xyz_w_tensor, dim=-2)[0][0], torch.max(point_xyz_w_tensor, dim=-2)[0][0]
+        ranges_min = torch.as_tensor(ranges[:3], dtype=torch.float32, device=min_xyz.device)
+        ranges_max = torch.as_tensor(ranges[3:], dtype=torch.float32, device=min_xyz.device)
+        if ranges is not None:
+            # print("min_xyz", min_xyz.shape)
+            # print("max_xyz", max_xyz.shape)
+            # print("ranges", ranges)
+            min_xyz, max_xyz = torch.max(torch.stack([min_xyz, ranges_min], dim=0), dim=0)[0], torch.min(torch.stack([max_xyz, ranges_max], dim=0), dim=0)[0]
+        min_xyz = min_xyz - torch.as_tensor(self.scaled_vsize_np * self.config.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
+        max_xyz = max_xyz + torch.as_tensor(self.scaled_vsize_np * self.config.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
+
+        ranges_tensor = torch.cat([min_xyz, max_xyz], dim=-1)
+        vdim_np = (max_xyz - min_xyz).cpu().numpy() / vsize_np
+        scaled_vdim_np = np.ceil(vdim_np / self.vscale_np).astype(np.int32)
+        return ranges_tensor, vsize_np, scaled_vdim_np
+    
+    def raw2out_density(self, raw_density):
+        if self.config.act_super > 0:
+            return self.density_super_act(raw_density - 1)  # according to mip nerf, to stablelize the training
+        else:
+            return self.density_act(raw_density)
+        
+    def raw2out_color(self, raw_color):
+        color = self.color_act(raw_color)
+        if self.config.act_super > 0:
+            color = color * (1 + 2 * 0.001) - 0.001 # according to mip nerf, to stablelize the training
+        return color
+            
+    def ray_march(ray_dist,
+              ray_valid,
+              ray_features,
+              bg_color=None):
+        # ray_dist: N x Rays x Samples
+        # ray_valid: N x Rays x Samples
+        # ray_features: N x Rays x Samples x Features
+        # Output
+        # ray_color: N x Rays x 3
+        # point_color: N x Rays x Samples x 3
+        # opacity: N x Rays x Samples
+        # acc_transmission: N x Rays x Samples
+        # blend_weight: N x Rays x Samples x 1
+        # background_transmission: N x Rays x 1
+
+        point_color = ray_features[..., 1:4]
+
+        # we are essentially predicting predict 1 - e^-sigma
+        sigma = ray_features[..., 0] * ray_valid.float()
+        opacity = 1 - torch.exp(-sigma * ray_dist)
+
+        # cumprod exclusive
+        acc_transmission = torch.cumprod(1. - opacity + 1e-10, dim=-1)
+        temp = torch.ones(opacity.shape[0:2] + (1, )).to(
+            opacity.device).float()  # N x R x 1
+
+        background_transmission = acc_transmission[:, :, [-1]]
+        acc_transmission = torch.cat([temp, acc_transmission[:, :, :-1]], dim=-1)
+        
+        def alpha_blend(opacity, acc_transmission):
+            return opacity * acc_transmission
+        blend_weight = alpha_blend(opacity, acc_transmission)[..., None]
+
+        ray_color = torch.sum(point_color * blend_weight, dim=-2, keepdim=False)
+        if bg_color is not None:
+            ray_color += bg_color.to(opacity.device).float().view(
+                background_transmission.shape[0], 1, 3) * background_transmission
+        # #
+        # if point_color.shape[1] > 0 and (torch.any(torch.isinf(point_color)) or torch.any(torch.isnan(point_color))):
+        #     print("ray_color", torch.min(ray_color),torch.max(ray_color))
+
+            # print("background_transmission", torch.min(background_transmission), torch.max(background_transmission))
+        background_blend_weight = alpha_blend(1, background_transmission)
+        # print("ray_color", torch.max(torch.abs(ray_color)), torch.max(torch.abs(sigma)), torch.max(torch.abs(opacity)),torch.max(torch.abs(acc_transmission)), torch.max(torch.abs(background_transmission)), torch.max(torch.abs(acc_transmission)), torch.max(torch.abs(background_blend_weight)))
+        return ray_color, point_color, opacity, acc_transmission, blend_weight, \
+            background_transmission, background_blend_weight
+    
+    
+    
+

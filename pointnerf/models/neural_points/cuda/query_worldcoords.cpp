@@ -6,7 +6,6 @@
 
 
 std::vector<torch::Tensor> woord_query_grid_point_index_cuda(
-        torch::Tensor pixel_idx_tensor,
         torch::Tensor raypos_tensor,
         torch::Tensor point_xyz_w_tensor,
         torch::Tensor actual_numpoints_tensor,
@@ -32,7 +31,6 @@ std::vector<torch::Tensor> woord_query_grid_point_index_cuda(
 
 
 std::vector<torch::Tensor> woord_query_grid_point_index(
-        torch::Tensor pixel_idx_tensor,
         torch::Tensor raypos_tensor,
         torch::Tensor point_xyz_w_tensor,
         torch::Tensor actual_numpoints_tensor,
@@ -50,12 +48,10 @@ std::vector<torch::Tensor> woord_query_grid_point_index(
         torch::Tensor scaled_vsize,
         const int kMaxThreadsPerBlock,
         const int NN){
-//  CHECK_INPUT(pixel_idx_tensor);
 //  CHECK_INPUT(raypos_tensor);
 //  CHECK_INPUT(point_xyz_w_tensor);
 //  CHECK_INPUT(actual_numpoints_tensor);
   return woord_query_grid_point_index_cuda(
-        pixel_idx_tensor,
         raypos_tensor,
         point_xyz_w_tensor,
         actual_numpoints_tensor,

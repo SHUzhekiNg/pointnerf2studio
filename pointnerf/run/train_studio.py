@@ -820,6 +820,7 @@ def main():
                 best_PSNR = max(test_psnr, best_PSNR)
                 visualizer.print_details(f"test at iter {total_steps}, PSNR: {test_psnr}, best_PSNR: {best_PSNR}, best_iter: {best_iter}")
             model.train()
+            print(i)
 
         # try:
         #     print("saving the model at the end of epoch")

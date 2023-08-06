@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import torch
 import yaml
+import numpy as np
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.utils.nerfstudio_collate import nerfstudio_collate
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
@@ -48,7 +49,6 @@ class PointNerfDataManagerConfig(VanillaDataManagerConfig):
     patch_stride_scaler: float = 0.5
     
     # from global.parser
-    
 
     # from nerf_synth360_ft_dataset.parser
     random_sample: str = "none"     # random sample pixels
@@ -101,7 +101,8 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         **kwargs,  # pylint: disable=unused-argument
     ):
         super().__init__(
-            config=config, device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank, **kwargs
+            config=config, device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank, 
+            **kwargs
         )
 
         # cameras = Cameras(
@@ -158,14 +159,28 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         """Returns the next batch of data from the train dataloader."""
         self.train_count += 1
         image_batch = next(self.iter_train_image_dataloader)
+        image_idx = (self.train_count-1) % image_batch["image_idx"].shape[0]
+        image_batch = {
+            "image_idx": torch.tensor(image_idx).unsqueeze(0),
+            "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)
+        }  # next(self.iter_train_image_dataloader)
         assert self.train_pixel_sampler is not None
         batch = self.train_pixel_sampler.sample(image_batch)
         ray_indices = batch["indices"]
         ray_bundle = self.train_ray_generator(ray_indices)
-        # batch["clip"], clip_scale = self.clip_interpolator(ray_indices)
-        # batch["dino"] = self.dino_dataloader(ray_indices)
-        # ray_bundle.metadata["clip_scales"] = clip_scale
+
         # assume all cameras have the same focal length and image width
-        ray_bundle.metadata["fx"] = self.train_dataset.cameras[0].fx.item()
-        ray_bundle.metadata["width"] = self.train_dataset.cameras[0].width.item()
+
+        # h = self.train_dataset.cameras[0].height.item()
+        # w = self.train_dataset.cameras[0].width.item()
+        # px = np.random.randint(0, w, size=(self.config.random_sample_size,
+        #                                  self.config.random_sample_size)).astype(np.float32)
+        # py = np.random.randint(0, h, size=(self.config.random_sample_size,
+        #                                  self.config.random_sample_size)).astype(np.float32)
+        # ray_bundle.metadata["pixel_idx"] = np.stack((px, py), axis=-1).astype(np.float32)
+        ray_bundle.metadata["camrotc2w"] = self.train_dataset.cameras[ray_bundle.camera_indices.cpu()].camera_to_worlds[0][0][0:3, 0:3]
+        # ray_bundle.metadata["h"] = h
+        # ray_bundle.metadata["w"] = w
+
+        
         return ray_bundle, batch

@@ -78,13 +78,13 @@ class lighting_fast_querier():
         if self.opt.inverse > 0:
             raypos_tensor, _, _, _ = near_far_disparity_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)
         else:
-            raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3 if self.opt.is_train > 0 else 0.)
+            raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.opt.z_depth_dim, near=near_depth, far=far_depth, jitter=0. if self.opt.is_train > 0 else 0.)
 
         D = raypos_tensor.shape[2]
         R = pixel_idx_tensor.reshape(point_xyz_w_tensor.shape[0], -1, 2).shape[1]
 
         sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = \
-            query_worldcoords_cuda.woord_query_grid_point_index(pixel_idx_tensor, raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, self.kernel_size_tensor,
+            query_worldcoords_cuda.woord_query_grid_point_index(raypos_tensor, point_xyz_w_tensor, actual_numpoints_tensor, self.kernel_size_tensor,
                                                                 self.query_size_tensor, self.opt.SR, self.opt.K, R, D,
                                                                 torch.as_tensor(scaled_vdim_np,device=self.device),
                                                                 self.opt.max_o, self.opt.P, self.radius_limit_np,
