@@ -397,12 +397,12 @@ class PointNerf(Model):
         # self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
 
         # neural points
-        self.points_xyz = state_dict["neural_points.xyz"]
-        self.points_embeding = state_dict["neural_points.points_embeding"]
-        self.points_conf = state_dict["neural_points.points_conf"]
-        self.points_dir = state_dict["neural_points.points_dir"]
-        self.points_color = state_dict["neural_points.points_color"]
-        self.Rw2c = state_dict["neural_points.Rw2c"]
+        self.points_xyz = state_dict["neural_points.xyz"].to(self._device)
+        self.points_embeding = state_dict["neural_points.points_embeding"].to(self._device)
+        self.points_conf = state_dict["neural_points.points_conf"].to(self._device)
+        self.points_dir = state_dict["neural_points.points_dir"].to(self._device)
+        self.points_color = state_dict["neural_points.points_color"].to(self._device)
+        self.Rw2c = state_dict["neural_points.Rw2c"].to(self._device)
 
     # dont know
     # Just to allow for size reduction of the checkpoint
@@ -439,12 +439,21 @@ class PointNerf(Model):
     def get_outputs(self, ray_bundle: RayBundle):
         if self.mlp_base is None:
             raise ValueError("populate_fields() must be called before get_outputs")
+        
+        kernel_size = np.asarray(self.config.kernel_size, dtype=np.int32)
+        kernel_size_tensor = torch.as_tensor(kernel_size, device=self._device, dtype=torch.int32)
+        query_size = np.asarray(self.config.query_size, dtype=np.int32)
+        query_size_tensor = torch.as_tensor(query_size, device=self._device, dtype=torch.int32)
+        # radius_limit_scale == 4 
+        radius_limit_np = np.asarray(4 * max(self.config.vsize[0], self.config.vsize[1])).astype(np.float32)
         self.vscale_np = np.array(self.config.vscale, dtype=np.int32)
         self.scaled_vsize_np = (self.config.vsize * self.vscale_np).astype(np.float32)
+        self.scaled_vsize_tensor = torch.as_tensor(self.scaled_vsize_np, device=self._device)
+
         # pixel_idx_tensor = ray_bundle.metadata["pixel_idx"].to(torch.int32)  # sb xiede 
-        cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0)   # torch.Size([1, 3, 3])
-        cam_pos_tensor = ray_bundle.origins[0].unsqueeze(0)              # torch.Size([1, 3])
-        ray_dirs_tensor = ray_bundle.directions.unsqueeze(0)             # torch.Size([1, 4900, 3])
+        cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0).to(self._device)   # torch.Size([1, 3, 3])
+        cam_pos_tensor = ray_bundle.origins[0].unsqueeze(0).to(self._device)              # torch.Size([1, 3])
+        ray_dirs_tensor = ray_bundle.directions.unsqueeze(0).to(self._device)             # torch.Size([1, 4900, 3])
         near_depth = ray_bundle.nears[0].item()                          # float
         far_depth = ray_bundle.fars[0].item()                            # float
         # intrinsic = inputs["intrinsic"].cpu().numpy()
@@ -454,18 +463,12 @@ class PointNerf(Model):
         raypos_tensor, _, _, _ = near_far_linear_ray_generation(cam_pos_tensor, ray_dirs_tensor, self.config.z_depth_dim, near=near_depth, far=far_depth, jitter=0.3)
 
         
-        point_xyz_w_tensor = self.points_xyz[None,...]
+        point_xyz_w_tensor = self.points_xyz[None,...].to(self._device)
         actual_numpoints_tensor = torch.ones([point_xyz_w_tensor.shape[0]], device=point_xyz_w_tensor.device, dtype=torch.int32) * point_xyz_w_tensor.shape[1]
         ranges_tensor, vsize_np, scaled_vdim_np = self.get_hyperparameters(self.config.vsize, point_xyz_w_tensor, ranges=self.config.ranges)
 
         D = raypos_tensor.shape[2]
         R = ray_dirs_tensor.shape[1]
-
-        kernel_size_tensor = torch.as_tensor(self.config.kernel_size, device=self._device, dtype=torch.int32)
-        query_size_tensor = torch.as_tensor(self.config.query_size, device=self._device, dtype=torch.int32)
-        # radius_limit_scale == 4 
-        radius_limit_np = np.asarray(4 * max(self.config.vsize[0], self.config.vsize[1])).astype(np.float32)
-        self.scaled_vsize_tensor = torch.as_tensor(self.scaled_vsize_np, device=self._device)
 
         # sample_pidx_tensor: B, R, SR, K
         sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = \
@@ -477,11 +480,11 @@ class PointNerf(Model):
                                                                 self.config.SR,
                                                                 self.config.K,
                                                                 R, D,
-                                                                torch.as_tensor(scaled_vdim_np,device=self._device),
+                                                                torch.as_tensor(scaled_vdim_np,device=self._device).to(self._device),
                                                                 self.config.max_o,
                                                                 self.config.P,
-                                                                radius_limit_np,
-                                                                ranges_tensor,
+                                                                torch.as_tensor(radius_limit_np,device=self._device).to(self._device),
+                                                                ranges_tensor.to(self._device),
                                                                 self.scaled_vsize_tensor,
                                                                 self.config.gpu_maxthr,
                                                                 self.config.NN)
@@ -493,7 +496,7 @@ class PointNerf(Model):
         sample_pidx_tensor = torch.clamp(sample_pidx_tensor, min=0).view(-1).long()
 
 
-        sample_loc_tensor = self.w2pers(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor)  # 
+        sample_loc_tensor = self.w2pers_loc(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor)  # 
         point_xyz_pers_tensor = self.w2pers(self.points_xyz, cam_rot_tensor, cam_pos_tensor)  # 
         sampled_embedding = torch.index_select(torch.cat([self.points_xyz[None, ...], point_xyz_pers_tensor, self.points_embeding], dim=-1), 1, sample_pidx_tensor).view(B, R, SR, K, self.points_embeding.shape[2]+self.points_xyz.shape[1]*2)
 
@@ -525,7 +528,8 @@ class PointNerf(Model):
 
         # weight:              B x valid R x SR         (1 * R * 80 * 8)
         # sampled_embedding:   B x valid R x SR x 32    (1 * R * 80 * 8 * 32)
-        weight, sampled_embedding = self.linear(sampled_embedding, dists, sample_pnt_mask, axis_weight=self.config.axis_weight)
+        axis_weight = torch.as_tensor(self.config.axis_weight, dtype=torch.float32, device="cuda")[None, None, None, None, :]
+        weight, sampled_embedding = self.linear(sampled_embedding, dists, sample_pnt_mask, axis_weight=axis_weight)
         weight = weight / torch.clamp(torch.sum(weight, dim=-1, keepdim=True), min=1e-8)
         def gradiant_clamp(sampled_conf, min=0.0001, max=1):
             diff = sampled_conf - torch.clamp(sampled_conf, min=min, max=max)
@@ -560,7 +564,7 @@ class PointNerf(Model):
         weight = weight.view(B * R * SR, K, 1)
         pts = pts_pnt
         # print("feat",feat.shape) # 501
-        feat = self.mlp_head(feat)
+        feat = self.mlp_base(feat)
 
 
         sampled_color = sampled_color.view(-1, sampled_color.shape[-1])
@@ -576,7 +580,7 @@ class PointNerf(Model):
         if self.config.apply_pnt_mask > 0:
             ori_viewdirs = ori_viewdirs[pnt_mask_flat, :]
         feat = torch.cat([feat, sampled_dir - ori_viewdirs, torch.sum(sampled_dir*ori_viewdirs, dim=-1, keepdim=True)], dim=-1)
-        feat = self.mlp_base(feat)
+        feat = self.mlp_head(feat)
 
 
         alpha_in = feat
@@ -603,15 +607,15 @@ class PointNerf(Model):
         color_in = torch.cat([color_in, viewdirs], dim=-1)
         color_in = self.mlp_color(color_in)
         color_output = self.raw2out_color(self.field_output_color(color_in))
-        output = torch.cat([alpha, color_output], dim=-1)
+        output_mlp = torch.cat([alpha, color_output], dim=-1)
 
 
         # print("output_placeholder", output_placeholder.shape)
         # self.opt.shading_color_channel_num == 3
-        output_placeholder = torch.zeros([total_len, 3 + 1], dtype=torch.float32, device=output.device)
-        output_placeholder[ray_valid] = output
+        output_placeholder = torch.zeros([total_len, 3 + 1], dtype=torch.float32, device=output_mlp.device)
+        output_placeholder[ray_valid] = output_mlp
 
-        decoded_features = output.view(in_shape[:-1] + (3 + 1,))
+        decoded_features = output_placeholder.view(in_shape[:-1] + (3 + 1,))
         ray_valid = ray_valid.view(in_shape[:-1])
 
         ray_dist = torch.cummax(sample_loc_tensor[..., 2], dim=-1)[0]
@@ -624,6 +628,7 @@ class PointNerf(Model):
         ray_dist = ray_dist * (1.0 - mask) + mask * vsize_np[2]
         ray_dist *= ray_valid.float()
 
+        output = {}
         output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
 
         (
@@ -645,46 +650,43 @@ class PointNerf(Model):
             output["blend_weight"] = blend_weight.detach()
             output["conf_coefficient"] = conf_coefficient
 
-        rgb_coarse = self.renderer_rgb(
-            rgb=ray_color,
-            weights=blend_weight,
-        )
-        accumulation_coarse = self.renderer_accumulation(blend_weight)
-        ##depth_coarse = self.renderer_depth(blend_weight, ray_samples_uniform)
+        output = self.fill_invalid(output)
 
-        outputs = {
-            "rgb": rgb_coarse,
-            "accumulation": accumulation_coarse
-        }
-
-        return outputs
+        return output
 
     # pylint: disable=unused-argument
     def get_loss_dict(self, outputs, batch, metrics_dict=None) -> Dict[str, torch.Tensor]:
         # Scaling metrics by coefficients to create the losses.
-        device = outputs["rgb"].device
+        device = outputs["coarse_raycolor"].device
         image = batch["image"].to(device)
 
-        rgb_loss = self.rgb_loss(image, outputs["rgb"])
-
-        loss_dict = {"rgb_loss": rgb_loss}
+        masked_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
+        masked_gt = torch.masked_select(image, (outputs["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
+        ray_masked_coarse_raycolor_loss = self.rgb_loss(masked_gt, masked_output)
+        coarse_raycolor_loss = self.rgb_loss(image, outputs["coarse_raycolor"])
+        
+        loss_dict = {
+            "ray_masked_coarse_raycolor_loss": ray_masked_coarse_raycolor_loss,
+            "coarse_raycolor_loss": coarse_raycolor_loss
+        }
         loss_dict = misc.scale_dict(loss_dict, self.config.loss_coefficients)
+
         return loss_dict
 
     def get_image_metrics_and_images(
         self, outputs: Dict[str, torch.Tensor], batch: Dict[str, torch.Tensor]
     ) -> Tuple[Dict[str, float], Dict[str, torch.Tensor]]:
-        image = batch["image"].to(outputs["rgb"].device)
-        rgb = outputs["rgb"]
-        acc = colormaps.apply_colormap(outputs["accumulation"])
-        depth = colormaps.apply_depth_colormap(
-            outputs["depth"],
-            accumulation=outputs["accumulation"],
-        )
+        image = batch["image"].to(outputs["coarse_raycolor"].device)
+        rgb = outputs["coarse_raycolor"]
+        # acc = colormaps.apply_colormap(outputs["accumulation"])
+        # depth = colormaps.apply_depth_colormap(
+        #     outputs["depth"],
+        #     accumulation=outputs["accumulation"],
+        # )
 
         combined_rgb = torch.cat([image, rgb], dim=1)
-        combined_acc = torch.cat([acc], dim=1)
-        combined_depth = torch.cat([depth], dim=1)
+        # combined_acc = torch.cat([acc], dim=1)
+        # combined_depth = torch.cat([depth], dim=1)
 
         # Switch images from [H, W, C] to [1, C, H, W] for metrics computations
         image = torch.moveaxis(image, -1, 0)[None, ...]
@@ -705,8 +707,8 @@ class PointNerf(Model):
 
         images_dict = {
             "img": combined_rgb,
-            "accumulation": combined_acc,
-            "depth": combined_depth,
+            # "accumulation": combined_acc,
+            # "depth": combined_depth,
         }
         return metrics_dict, images_dict
     
@@ -718,6 +720,15 @@ class PointNerf(Model):
         yper = xyz[:, :, 1] / xyz[:, :, 2]
         return torch.stack([xper, yper, xyz[:, :, 2]], dim=-1)
     
+    def w2pers_loc(self, point_xyz_w, camrotc2w, campos):
+        #     point_xyz_pers    B X M X 3
+        xyz_w_shift = point_xyz_w - campos[:, None, :]
+        xyz_c = torch.sum(xyz_w_shift[..., None,:] * torch.transpose(camrotc2w, 1, 2)[:, None, None,...], dim=-1)
+        z_pers = xyz_c[..., 2]
+        x_pers = xyz_c[..., 0] / xyz_c[..., 2]
+        y_pers = xyz_c[..., 1] / xyz_c[..., 2]
+        return torch.stack([x_pers, y_pers, z_pers], dim=-1)
+    
     def linear(self, embedding, dists, pnt_mask, axis_weight=None):
         # dists: B * R * SR * K * channel
         # return B * R * SR * K
@@ -727,7 +738,6 @@ class PointNerf(Model):
             weights = 1. / torch.clamp(torch.sqrt(torch.sum(torch.square(dists[...,:2]), dim=-1)) * axis_weight[..., 0] + torch.abs(dists[...,2]) * axis_weight[..., 1], min= 1e-6)
         weights = pnt_mask * weights
         return weights, embedding
-    
     
     def get_hyperparameters(self, vsize_np, point_xyz_w_tensor, ranges=None):
         '''
@@ -767,10 +777,7 @@ class PointNerf(Model):
             color = color * (1 + 2 * 0.001) - 0.001 # according to mip nerf, to stablelize the training
         return color
             
-    def ray_march(ray_dist,
-              ray_valid,
-              ray_features,
-              bg_color=None):
+    def ray_march(self, ray_dist, ray_valid, ray_features, bg_color=None):
         # ray_dist: N x Rays x Samples
         # ray_valid: N x Rays x Samples
         # ray_features: N x Rays x Samples x Features
@@ -804,16 +811,40 @@ class PointNerf(Model):
         if bg_color is not None:
             ray_color += bg_color.to(opacity.device).float().view(
                 background_transmission.shape[0], 1, 3) * background_transmission
-        # #
-        # if point_color.shape[1] > 0 and (torch.any(torch.isinf(point_color)) or torch.any(torch.isnan(point_color))):
-        #     print("ray_color", torch.min(ray_color),torch.max(ray_color))
 
-            # print("background_transmission", torch.min(background_transmission), torch.max(background_transmission))
         background_blend_weight = alpha_blend(1, background_transmission)
-        # print("ray_color", torch.max(torch.abs(ray_color)), torch.max(torch.abs(sigma)), torch.max(torch.abs(opacity)),torch.max(torch.abs(acc_transmission)), torch.max(torch.abs(background_transmission)), torch.max(torch.abs(acc_transmission)), torch.max(torch.abs(background_blend_weight)))
+
         return ray_color, point_color, opacity, acc_transmission, blend_weight, \
             background_transmission, background_blend_weight
     
-    
+    def fill_invalid(self, output):
+        # ray_mask:             torch.Size([1, 1024])
+        # coarse_is_background: torch.Size([1, 336, 1])  -> 1, 1024, 1
+        # coarse_raycolor:      torch.Size([1, 336, 3])  -> 1, 1024, 3
+        # coarse_point_opacity: torch.Size([1, 336, 24]) -> 1, 1024, 24
+        ray_mask = output["ray_mask"]
+        B, OR = ray_mask.shape
+        ray_inds = torch.nonzero(ray_mask) # 336, 2
+        coarse_is_background_tensor = torch.ones([B, OR, 1], dtype=output["coarse_is_background"].dtype, device=output["coarse_is_background"].device)
+        # print("coarse_is_background", output["coarse_is_background"].shape)
+        # print("coarse_is_background_tensor", coarse_is_background_tensor.shape)
+        # print("ray_inds", ray_inds.shape, ray_mask.shape)
+        coarse_is_background_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_is_background"]
+        output["coarse_is_background"] = coarse_is_background_tensor
+        output['coarse_mask'] = 1 - coarse_is_background_tensor
+
+        coarse_raycolor_tensor = torch.ones([B, OR, 3], dtype=output["coarse_raycolor"].dtype, device=output["coarse_raycolor"].device) * self._background_color[None, ...].to("cuda")
+        coarse_raycolor_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_raycolor"]
+        output["coarse_raycolor"] = coarse_raycolor_tensor
+
+        coarse_point_opacity_tensor = torch.zeros([B, OR, output["coarse_point_opacity"].shape[2]], dtype=output["coarse_point_opacity"].dtype, device=output["coarse_point_opacity"].device)
+        coarse_point_opacity_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_point_opacity"]
+        output["coarse_point_opacity"] = coarse_point_opacity_tensor
+
+        queried_shading_tensor = torch.ones([B, OR, output["queried_shading"].shape[2]], dtype=output["queried_shading"].dtype, device=output["queried_shading"].device)
+        queried_shading_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["queried_shading"]
+        output["queried_shading"] = queried_shading_tensor
+
+        return output
     
 

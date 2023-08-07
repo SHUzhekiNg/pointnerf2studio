@@ -1,6 +1,6 @@
 import typing
 from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
-from ..data.studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
+from .studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
 from torch.cuda.amp.grad_scaler import GradScaler
 from nerfstudio.pipelines.base_pipeline import (
     DDP,

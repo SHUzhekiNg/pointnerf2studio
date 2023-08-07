@@ -11,7 +11,7 @@ from nerfstudio.plugins.types import MethodSpecification
 
 from .studio_model import PointNerf, PointNerfConfig
 from .studio_pipeline import PointNerfPipeline
-from ..data.studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
+from .studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
 
 pointnerf_config = TrainerConfig(
     method_name="pointnerf-original",
@@ -26,8 +26,8 @@ pointnerf_config = TrainerConfig(
         datamanager=PointNerfDataManagerConfig(
             _target=PointNerfDataManager,
             dataparser=MinimalDataParserConfig(),
-            eval_num_rays_per_batch=400,
-            train_num_rays_per_batch=400,
+            eval_num_rays_per_batch=4900,
+            train_num_rays_per_batch=4900,
         ),
         model=PointNerfConfig(
         	_target=PointNerf
