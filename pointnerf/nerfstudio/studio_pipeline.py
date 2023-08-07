@@ -1,5 +1,4 @@
 import typing
-from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
 from .studio_datamanager import PointNerfDataManagerConfig, PointNerfDataManager
 from torch.cuda.amp.grad_scaler import GradScaler
 from nerfstudio.pipelines.base_pipeline import (
@@ -16,7 +15,7 @@ from typing_extensions import Literal
 class PointNerfPipeline(VanillaPipeline):
     def __init__(
         self,
-        config: VanillaPipelineConfig,
+        config: PointNerfDataManagerConfig,
         device: str,
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
@@ -27,27 +26,19 @@ class PointNerfPipeline(VanillaPipeline):
         self.config = config
         self.test_mode = test_mode
 
-        # self.datamanager: PointNerfDataManager = config.datamanager.setup(
-        #     device=device,
-        #     test_mode=test_mode,
-        #     world_size=world_size,
-        #     local_rank=local_rank,
-        # )
-
-        self.datamanager: VanillaDataManager = config.datamanager.setup(
+        self.datamanager: PointNerfDataManager = config.datamanager.setup(
             device=device,
             test_mode=test_mode,
             world_size=world_size,
             local_rank=local_rank,
         )
+
         self.datamanager.to(device)
         assert self.datamanager.train_dataset is not None, "Missing input dataset"
         kwargs = {}
         # Loaded pointcloud must be transformed using the transform from the Dataparser
         self._model = config.model.setup(
             scene_box=self.datamanager.train_dataset.scene_box,
-            dataparser_transform=self.datamanager.train_dataparser_outputs.dataparser_transform,
-            dataparser_scale=self.datamanager.train_dataparser_outputs.dataparser_scale,
             num_train_data=len(self.datamanager.train_dataset),
             cameras=self.datamanager.train_dataset.cameras,
             **kwargs,

@@ -76,8 +76,7 @@ def get_latest_epoch(resume_dir):
 class PointNerfConfig(ModelConfig):
     _target: Any = dataclasses.field(default_factory=lambda: PointNerf)
     path_point_cloud: Optional[Path] = None
-    num_tetrahedra_vertices: Optional[int] = None
-    num_tetrahedra_cells: Optional[int] = None
+    eval_num_rays_per_chunk: int = 4900
 
     num_pos_freqs: Optional[int] = 10
     num_viewdir_freqs: Optional[int] = 4
@@ -123,7 +122,7 @@ class PointNerfConfig(ModelConfig):
     gpu_maxthr: int = 1024 # 'number of coarse samples'
 
     def __post_init__(self):
-        if self.path_point_cloud is not None and self.num_tetrahedra_vertices is None:
+        if self.path_point_cloud is not None:
             if not self.path_point_cloud.exists():
                 raise RuntimeError(f"PointCloud path {self.path_point_cloud} does not exist")
 
@@ -241,8 +240,6 @@ class PointNerf(Model):
     def __init__(
         self,
         config: PointNerfConfig,
-        dataparser_transform=None,
-        dataparser_scale=None,
         cameras=None,
         **kwargs,
     ) -> None:
@@ -251,8 +248,6 @@ class PointNerf(Model):
             **kwargs,
         )
         self._point_initialized = False
-        self.dataparser_transform = dataparser_transform
-        self.dataparser_scale = dataparser_scale
         self.cameras = cameras
         self._device = "cuda"
         self._init_pointnerf()
@@ -275,6 +270,17 @@ class PointNerf(Model):
             if isinstance(self, nn.DataParallel):
                 self = self.module
             self.load_state_dict_from_init(state_dict)
+
+            self.kernel_size = np.asarray(self.config.kernel_size, dtype=np.int32)
+            self.kernel_size_tensor = torch.as_tensor(self.kernel_size, device=self._device, dtype=torch.int32)
+            self.query_size = np.asarray(self.config.query_size, dtype=np.int32)
+            self.query_size_tensor = torch.as_tensor(self.query_size, device=self._device, dtype=torch.int32)
+            # radius_limit_scale == 4 
+            self.radius_limit_np = np.asarray(4 * max(self.config.vsize[0], self.config.vsize[1])).astype(np.float32)
+            self.vscale_np = np.array(self.config.vscale, dtype=np.int32)
+            self.scaled_vsize_np = (self.config.vsize * self.vscale_np).astype(np.float32)
+            self.scaled_vsize_tensor = torch.as_tensor(self.scaled_vsize_np, device=self._device)
+
             self._point_initialized = True
         else:
             raise RuntimeError("The point_cloud_path must be specified.")
@@ -440,16 +446,6 @@ class PointNerf(Model):
         if self.mlp_base is None:
             raise ValueError("populate_fields() must be called before get_outputs")
         
-        kernel_size = np.asarray(self.config.kernel_size, dtype=np.int32)
-        kernel_size_tensor = torch.as_tensor(kernel_size, device=self._device, dtype=torch.int32)
-        query_size = np.asarray(self.config.query_size, dtype=np.int32)
-        query_size_tensor = torch.as_tensor(query_size, device=self._device, dtype=torch.int32)
-        # radius_limit_scale == 4 
-        radius_limit_np = np.asarray(4 * max(self.config.vsize[0], self.config.vsize[1])).astype(np.float32)
-        self.vscale_np = np.array(self.config.vscale, dtype=np.int32)
-        self.scaled_vsize_np = (self.config.vsize * self.vscale_np).astype(np.float32)
-        self.scaled_vsize_tensor = torch.as_tensor(self.scaled_vsize_np, device=self._device)
-
         # pixel_idx_tensor = ray_bundle.metadata["pixel_idx"].to(torch.int32)  # sb xiede 
         cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0).to(self._device)   # torch.Size([1, 3, 3])
         cam_pos_tensor = ray_bundle.origins[0].unsqueeze(0).to(self._device)              # torch.Size([1, 3])
@@ -475,15 +471,15 @@ class PointNerf(Model):
             query_worldcoords_cuda.woord_query_grid_point_index(raypos_tensor,
                                                                 point_xyz_w_tensor,
                                                                 actual_numpoints_tensor,
-                                                                kernel_size_tensor,
-                                                                query_size_tensor,
+                                                                self.kernel_size_tensor,
+                                                                self.query_size_tensor,
                                                                 self.config.SR,
                                                                 self.config.K,
                                                                 R, D,
                                                                 torch.as_tensor(scaled_vdim_np,device=self._device).to(self._device),
                                                                 self.config.max_o,
                                                                 self.config.P,
-                                                                torch.as_tensor(radius_limit_np,device=self._device).to(self._device),
+                                                                torch.as_tensor(self.radius_limit_np,device=self._device).to(self._device),
                                                                 ranges_tensor.to(self._device),
                                                                 self.scaled_vsize_tensor,
                                                                 self.config.gpu_maxthr,

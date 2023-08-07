@@ -35,9 +35,9 @@ pointnerf_config = TrainerConfig(
     ),
     max_num_iterations=200000,
     steps_per_save=25000,
-    steps_per_eval_batch=1000,
-    steps_per_eval_image=2000,
-    steps_per_eval_all_images=50000,
+    steps_per_eval_batch=1000,  # 1000
+    steps_per_eval_image=250000,
+    steps_per_eval_all_images=250000,
     optimizers={
         "fields": {
             "optimizer": RAdamOptimizerConfig(lr=0.001),
