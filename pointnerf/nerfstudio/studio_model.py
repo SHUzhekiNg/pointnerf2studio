@@ -42,14 +42,6 @@ from ..models.helpers.networks import PointNeRFEncoding
 from ..models.rendering.diff_ray_marching import near_far_linear_ray_generation_studio, near_far_linear_ray_generation
 CONSOLE = Console(width=120)
 
-# TODO:
-query_worldcoords_cuda = load_cuda(
-    name='query_worldcoords_cuda',
-    sources=[
-        os.path.join("/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/models/neural_points", path)
-        for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
-    verbose=True)
-
 
 def skimage_ssim(image, rgb):
     # Scikit implementation used in PointNeRF
@@ -62,7 +54,7 @@ def skimage_ssim(image, rgb):
 def skimage_rmse(image, rgb):
     # Scikit implementation used in PointNeRF
     values = [
-        np.sqrt(mean_squared_error(gt, img)) for gt, img in zip(image.cpu(), rgb.cpu())
+        np.sqrt(mean_squared_error(gt, img)) for gt, img in zip(image.cpu().numpy(), rgb.cpu().numpy())
     ]
     return sum(values) / len(values)
 
@@ -76,7 +68,7 @@ def get_latest_epoch(resume_dir):
 class PointNerfConfig(ModelConfig):
     _target: Any = dataclasses.field(default_factory=lambda: PointNerf)
     path_point_cloud: Optional[Path] = None
-    eval_num_rays_per_chunk: int = 4900
+    eval_num_rays_per_chunk: int = 4096
 
     num_pos_freqs: Optional[int] = 10
     num_viewdir_freqs: Optional[int] = 4
@@ -251,6 +243,13 @@ class PointNerf(Model):
         self.cameras = cameras
         self._device = "cuda"
         self._init_pointnerf()
+        # TODO:
+        self.query_worldcoords_cuda = load_cuda(
+            name='query_worldcoords_cuda',
+            sources=[
+                os.path.join("/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/models/neural_points", path)
+                for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
+            verbose=True)
         
     # load essential running things. (nerual point cloud)
     def _init_pointnerf(self):
@@ -446,8 +445,11 @@ class PointNerf(Model):
         if self.mlp_base is None:
             raise ValueError("populate_fields() must be called before get_outputs")
         
-        # pixel_idx_tensor = ray_bundle.metadata["pixel_idx"].to(torch.int32)  # sb xiede 
-        cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0).to(self._device)   # torch.Size([1, 3, 3])
+        # pixel_idx_tensor = ray_bundle.metadata["pixel_idx"].to(torch.int32)  # sb xiede
+        if ray_bundle.metadata["camrotc2w"].shape[0] != 3:
+            cam_rot_tensor = ray_bundle.metadata["camrotc2w"][0].view(3, 3).unsqueeze(0).to(self._device)
+        else:
+            cam_rot_tensor = ray_bundle.metadata["camrotc2w"].unsqueeze(0).to(self._device)   # torch.Size([1, 3, 3])
         cam_pos_tensor = ray_bundle.origins[0].unsqueeze(0).to(self._device)              # torch.Size([1, 3])
         ray_dirs_tensor = ray_bundle.directions.unsqueeze(0).to(self._device)             # torch.Size([1, 4900, 3])
         near_depth = ray_bundle.nears[0].item()                          # float
@@ -468,22 +470,22 @@ class PointNerf(Model):
 
         # sample_pidx_tensor: B, R, SR, K
         sample_pidx_tensor, sample_loc_w_tensor, ray_mask_tensor = \
-            query_worldcoords_cuda.woord_query_grid_point_index(raypos_tensor,
-                                                                point_xyz_w_tensor,
-                                                                actual_numpoints_tensor,
-                                                                self.kernel_size_tensor,
-                                                                self.query_size_tensor,
-                                                                self.config.SR,
-                                                                self.config.K,
-                                                                R, D,
-                                                                torch.as_tensor(scaled_vdim_np,device=self._device).to(self._device),
-                                                                self.config.max_o,
-                                                                self.config.P,
-                                                                torch.as_tensor(self.radius_limit_np,device=self._device).to(self._device),
-                                                                ranges_tensor.to(self._device),
-                                                                self.scaled_vsize_tensor,
-                                                                self.config.gpu_maxthr,
-                                                                self.config.NN)
+            self.query_worldcoords_cuda.woord_query_grid_point_index(raypos_tensor,
+                                                                        point_xyz_w_tensor,
+                                                                        actual_numpoints_tensor,
+                                                                        self.kernel_size_tensor,
+                                                                        self.query_size_tensor,
+                                                                        self.config.SR,
+                                                                        self.config.K,
+                                                                        R, D,
+                                                                        torch.as_tensor(scaled_vdim_np,device=self._device).to(self._device),
+                                                                        self.config.max_o,
+                                                                        self.config.P,
+                                                                        torch.as_tensor(self.radius_limit_np,device=self._device).to(self._device),
+                                                                        ranges_tensor.to(self._device),
+                                                                        self.scaled_vsize_tensor,
+                                                                        self.config.gpu_maxthr,
+                                                                        self.config.NN)
 
         sample_ray_dirs_tensor = torch.masked_select(ray_dirs_tensor, ray_mask_tensor[..., None]>0).reshape(ray_dirs_tensor.shape[0],-1,3)[...,None,:].expand(-1, -1, self.config.SR, -1).contiguous()
 
@@ -511,6 +513,7 @@ class PointNerf(Model):
         ray_valid = torch.any(sample_pnt_mask, dim=-1).view(-1)
         total_len = len(ray_valid)
         in_shape = sample_loc_w_tensor.shape
+        # del sample_pidx_tensor, point_xyz_w_tensor, actual_numpoints_tensor, raypos_tensor
 
         if sampled_xyz_pers.shape[1] > 0:
             xdist = sampled_xyz_pers[..., 0] * sampled_xyz_pers[..., 2] - sample_loc_tensor[:, :, :, None, 0] * sample_loc_tensor[:, :, :, None, 2]
@@ -521,7 +524,7 @@ class PointNerf(Model):
         else:
             B, R, SR, K, _ = sampled_xyz_pers.shape
             dists = torch.zeros([B, R, SR, K, 6], device=sampled_xyz_pers.device, dtype=sampled_xyz_pers.dtype)
-
+        # del sample_loc_w_tensor, sampled_xyz_pers, sampled_xyz
         # weight:              B x valid R x SR         (1 * R * 80 * 8)
         # sampled_embedding:   B x valid R x SR x 32    (1 * R * 80 * 8 * 32)
         axis_weight = torch.as_tensor(self.config.axis_weight, dtype=torch.float32, device="cuda")[None, None, None, None, :]
@@ -531,11 +534,11 @@ class PointNerf(Model):
             diff = sampled_conf - torch.clamp(sampled_conf, min=min, max=max)
             return sampled_conf - diff.detach()
         conf_coefficient = gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)
-
+        # del sampled_conf
 
         # viewmlp
         pnt_mask_flat = sample_pnt_mask.view(-1)
-        pts = sample_loc_w_tensor.view(-1, sample_loc_w_tensor.shape[-1])
+        # pts = sample_loc_w_tensor.view(-1, sample_loc_w_tensor.shape[-1])
         viewdirs = sample_ray_dirs_tensor.view(-1, sample_ray_dirs_tensor.shape[-1])
         B, R, SR, K, _ = dists.shape
         sampled_Rw2c = sampled_Rw2c.transpose(-1, -2)
@@ -553,6 +556,7 @@ class PointNerf(Model):
         dists_flat[..., :3] = dists_flat[..., :3] @ sampled_Rw2c
         dists_flat = self.dists_encoding.forward(dists_flat)
         feat= sampled_embedding.view(-1, sampled_embedding.shape[-1])
+        # del sampled_embedding, sample_ray_dirs_tensor
         # print("feat", feat.shape)
         feat = feat[pnt_mask_flat, :]
         feat = torch.cat([feat, self.feature_encoding.forward(feat)], dim=-1)
@@ -577,7 +581,7 @@ class PointNerf(Model):
             ori_viewdirs = ori_viewdirs[pnt_mask_flat, :]
         feat = torch.cat([feat, sampled_dir - ori_viewdirs, torch.sum(sampled_dir*ori_viewdirs, dim=-1, keepdim=True)], dim=-1)
         feat = self.mlp_head(feat)
-
+        # del sampled_dir, sampled_color
 
         alpha_in = feat
         alpha = self.raw2out_density(self.field_output_density(alpha_in))
@@ -625,7 +629,7 @@ class PointNerf(Model):
         ray_dist *= ray_valid.float()
 
         output = {}
-        output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
+        # output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
 
         (
             ray_color,
@@ -639,15 +643,15 @@ class PointNerf(Model):
         # ray_color = self.tone_map(ray_color)
         output["coarse_raycolor"] = ray_color
         output["coarse_point_opacity"] = opacity
-        output["coarse_is_background"] = background_transmission
+        output["coarse_is_background"] = background_transmission.squeeze(0)
         output["ray_mask"] = ray_mask_tensor
-        if weight is not None:
-            output["weight"] = weight.detach()
-            output["blend_weight"] = blend_weight.detach()
-            output["conf_coefficient"] = conf_coefficient
+        # if weight is not None:
+        #     output["weight"] = weight.detach()
+        #     output["blend_weight"] = blend_weight.detach()
+        #     output["conf_coefficient"] = conf_coefficient
 
         output = self.fill_invalid(output)
-
+        output["ray_mask"] = output["ray_mask"].squeeze(0)
         return output
 
     # pylint: disable=unused-argument
@@ -656,10 +660,10 @@ class PointNerf(Model):
         device = outputs["coarse_raycolor"].device
         image = batch["image"].to(device)
 
-        masked_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
-        masked_gt = torch.masked_select(image, (outputs["ray_mask"] > 0)[..., None].expand(-1, -1, 3)).reshape(1, -1, 3)
+        masked_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
+        masked_gt = torch.masked_select(image, (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
         ray_masked_coarse_raycolor_loss = self.rgb_loss(masked_gt, masked_output)
-        coarse_raycolor_loss = self.rgb_loss(image, outputs["coarse_raycolor"])
+        coarse_raycolor_loss = self.rgb_loss(image.unsqueeze(0), outputs["coarse_raycolor"])
         
         loss_dict = {
             "ray_masked_coarse_raycolor_loss": ray_masked_coarse_raycolor_loss,
@@ -826,20 +830,20 @@ class PointNerf(Model):
         # print("coarse_is_background_tensor", coarse_is_background_tensor.shape)
         # print("ray_inds", ray_inds.shape, ray_mask.shape)
         coarse_is_background_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_is_background"]
-        output["coarse_is_background"] = coarse_is_background_tensor
-        output['coarse_mask'] = 1 - coarse_is_background_tensor
+        output["coarse_is_background"] = coarse_is_background_tensor.squeeze(0)
+        output['coarse_mask'] = (1 - coarse_is_background_tensor).squeeze(0)
 
         coarse_raycolor_tensor = torch.ones([B, OR, 3], dtype=output["coarse_raycolor"].dtype, device=output["coarse_raycolor"].device) * self._background_color[None, ...].to("cuda")
         coarse_raycolor_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_raycolor"]
-        output["coarse_raycolor"] = coarse_raycolor_tensor
+        output["coarse_raycolor"] = coarse_raycolor_tensor.squeeze(0)
 
         coarse_point_opacity_tensor = torch.zeros([B, OR, output["coarse_point_opacity"].shape[2]], dtype=output["coarse_point_opacity"].dtype, device=output["coarse_point_opacity"].device)
         coarse_point_opacity_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_point_opacity"]
-        output["coarse_point_opacity"] = coarse_point_opacity_tensor
+        output["coarse_point_opacity"] = coarse_point_opacity_tensor.squeeze(0)
 
-        queried_shading_tensor = torch.ones([B, OR, output["queried_shading"].shape[2]], dtype=output["queried_shading"].dtype, device=output["queried_shading"].device)
-        queried_shading_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["queried_shading"]
-        output["queried_shading"] = queried_shading_tensor
+        # queried_shading_tensor = torch.ones([B, OR, output["queried_shading"].shape[2]], dtype=output["queried_shading"].dtype, device=output["queried_shading"].device)
+        # queried_shading_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["queried_shading"]
+        # output["queried_shading"] = queried_shading_tensor
 
         return output
     

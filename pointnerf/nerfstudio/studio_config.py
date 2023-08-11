@@ -25,19 +25,19 @@ pointnerf_config = TrainerConfig(
         # ),
         datamanager=PointNerfDataManagerConfig(
             _target=PointNerfDataManager,
-            dataparser=MinimalDataParserConfig(),
-            eval_num_rays_per_batch=4900,
-            train_num_rays_per_batch=4900,
+            eval_num_rays_per_batch=8192,
+            train_num_rays_per_batch=8192,
         ),
         model=PointNerfConfig(
-        	_target=PointNerf
+        	_target=PointNerf,
+            eval_num_rays_per_chunk=8192,
     	),
     ),
     max_num_iterations=200000,
     steps_per_save=25000,
     steps_per_eval_batch=1000,  # 1000
-    steps_per_eval_image=250000,
-    steps_per_eval_all_images=250000,
+    steps_per_eval_image=2000,  
+    steps_per_eval_all_images=1000000,  # set to a very large number so we don't eval with all images
     optimizers={
         "fields": {
             "optimizer": RAdamOptimizerConfig(lr=0.001),
