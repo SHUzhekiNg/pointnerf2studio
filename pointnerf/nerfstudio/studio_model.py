@@ -33,7 +33,7 @@ from skimage.metrics import structural_similarity
 from torch import nn
 from torch.nn import Parameter
 from torch.utils.cpp_extension import load as load_cuda
-from torchmetrics import PeakSignalNoiseRatio
+from torchmetrics.image import PeakSignalNoiseRatio
 from torchmetrics.functional import structural_similarity_index_measure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
@@ -82,7 +82,6 @@ class PointNerfConfig(ModelConfig):
     point_dir_mode: Optional[bool] = True
 
     num_samples: int = 80
-    num_fine_samples: int = 256
     use_biased_sampler: bool = False
     field_dim: int = 64
 
@@ -104,7 +103,6 @@ class PointNerfConfig(ModelConfig):
     ranges: List[float] = dataclasses.field(default_factory=lambda: [-0.721, -0.695, -0.995, 0.658, 0.706, 1.050])
     z_depth_dim: int = 400  # num_coarse_sample
 
-    
     # "query"
     SR: int = 80
     K: int = 8
@@ -119,114 +117,12 @@ class PointNerfConfig(ModelConfig):
                 raise RuntimeError(f"PointCloud path {self.path_point_cloud} does not exist")
 
 
-# Map from uniform space to transformed space
-def map_from_real_distances_to_biased_with_bounds(num_bounds, bounds, samples):
-    lengths = bounds[..., 1] - bounds[..., 0]
-    sum_lengths = lengths.sum(-1)
-    part_len = sum_lengths / num_bounds
-    bounds_start = bounds[..., 0, 0]
-    bounds_end = torch.gather(bounds[..., 1], 1, (num_bounds[:, None] - 1).clamp_min_(0)).squeeze(-1)
-    rest = (samples - bounds_start[..., None]) / (bounds_end - bounds_start)[..., None]
-    rest *= num_bounds[..., None]
-    intervals = rest.floor().clamp_max_(num_bounds[..., None] - 1).clamp_min_(0)
-    rest = rest - intervals
-    intervals = intervals.long()
-    cum_lengths = torch.cumsum(torch.cat((bounds_start[:, None], lengths), 1), 1)
-    mapped_samples = torch.gather(cum_lengths, 1, intervals) + torch.gather(lengths, 1, intervals) * rest
-    return mapped_samples
-
-# TODO:
-class PointNerfSampler(Sampler):
-    """Sample points according to a function.
-
-    Args:
-        num_samples: Number of samples per ray
-        train_stratified: Use stratified sampling during training. Defaults to True
-    """
-
-    def __init__(
-        self,
-        num_samples: Optional[int] = None,
-        train_stratified=True,
-    ) -> None:
-        super().__init__(num_samples=num_samples)
-        self.train_stratified = train_stratified
-
-    def generate_ray_samples(
-        self,
-        ray_bundle: Optional[RayBundle] = None,
-        num_samples: Optional[int] = None,
-        *,
-        num_visited_cells,
-        hit_distances,
-    ) -> RaySamples:
-        """Generates position samples according to spacing function.
-
-        Args:
-            ray_bundle: Rays to generate samples for
-            num_samples: Number of samples per ray
-
-        Returns:
-            Positions and deltas for samples along a ray
-        """
-        assert ray_bundle is not None
-        assert ray_bundle.nears is not None
-        assert ray_bundle.fars is not None
-
-        num_samples = num_samples or self.num_samples
-        assert num_samples is not None
-        num_rays = ray_bundle.origins.shape[0]
-
-        bins = torch.linspace(0.0, 1.0, num_samples + 1).to(ray_bundle.origins.device)[None, ...]  # [1, num_samples+1]
-
-        # TODO More complicated than it needs to be.
-        if self.train_stratified and self.training:
-            t_rand = torch.rand((num_rays, num_samples + 1), dtype=bins.dtype, device=bins.device)
-            bin_centers = (bins[..., 1:] + bins[..., :-1]) / 2.0
-            bin_upper = torch.cat([bin_centers, bins[..., -1:]], -1)
-            bin_lower = torch.cat([bins[..., :1], bin_centers], -1)
-            bins = bin_lower + (bin_upper - bin_lower) * t_rand
-
-        s_near, s_far = ray_bundle.nears, ray_bundle.fars
-        spacing_to_euclidean_fn = lambda x: x * s_far + (1 - x) * s_near
-        euclidean_bins = spacing_to_euclidean_fn(bins)
-        euclidean_bins = map_from_real_distances_to_biased_with_bounds(
-            num_visited_cells.long(), hit_distances, euclidean_bins
-        )
-        bins = (euclidean_bins - s_near) / (s_far - s_near)
-
-        ray_samples = ray_bundle.get_ray_samples(
-            bin_starts=euclidean_bins[..., :-1, None],
-            bin_ends=euclidean_bins[..., 1:, None],
-            spacing_starts=bins[..., :-1, None],
-            spacing_ends=bins[..., 1:, None],
-            spacing_to_euclidean_fn=spacing_to_euclidean_fn,
-        )
-
-        return ray_samples
-
-
-class GradientScaler(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, colors, sigmas, ray_dist):
-        ctx.save_for_backward(ray_dist)
-        return colors, sigmas, ray_dist
-
-    @staticmethod
-    def backward(ctx, grad_output_colors, grad_output_sigmas, grad_output_ray_dist):
-        (ray_dist,) = ctx.saved_tensors
-        scaling = torch.square(ray_dist).clamp(0, 1)
-        return grad_output_colors * scaling, grad_output_sigmas * scaling, grad_output_ray_dist
-
-
 # pylint: disable=attribute-defined-outside-init
 class PointNerf(Model):
     """PointNerf model
-
     Args:
         config: Basic NeRF configuration to instantiate model
     """
-
     config: PointNerfConfig
 
     def __init__(
@@ -247,7 +143,7 @@ class PointNerf(Model):
         self.query_worldcoords_cuda = load_cuda(
             name='query_worldcoords_cuda',
             sources=[
-                os.path.join("/home/zhenglicheng/Desktop/bootcamp/pointnerfstudio/pointnerf2studio/pointnerf/models/neural_points", path)
+                os.path.join("/data/zhenglc/pointnerf2studio/pointnerf/models/neural_points", path)
                 for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
             verbose=True)
         
@@ -289,12 +185,6 @@ class PointNerf(Model):
         """Set the fields and modules"""
         super().populate_modules()
 
-        # fields
-        # self.position_encoding = PointNeRFEncoding(  # NeRFEncoding
-        #     in_dim=2,
-        #     num_frequencies=self.config.num_pos_freqs, # 10
-        #     ori=False
-        # )
         self.direction_encoding = PointNeRFEncoding(  # NeRFEncoding
             in_dim=2,
             num_frequencies=self.config.num_viewdir_freqs,  # 4
@@ -349,19 +239,7 @@ class PointNerf(Model):
         self.density_act = torch.nn.ReLU()
         self.color_act = torch.nn.Sigmoid()
 
-        # TODO: samplers
-        self.sampler_uniform = PointNerfSampler(num_samples=self.config.num_samples)
-        # if self.config.num_fine_samples > 0:
-        #     self.sampler_pdf = PDFSampler(num_samples=self.config.num_fine_samples)
-
-        # TODO: is it right? just copy and paste from tetra's
-        # renderers
-        self._background_color = nerfstudio.utils.colors.WHITE
-        self.renderer_rgb = RGBRenderer(background_color=self._background_color)
-        self.renderer_accumulation = AccumulationRenderer()
-        self.renderer_depth = DepthRenderer()
-
-        # TODO: losses, maybe 2.
+        # losses
         self.rgb_loss = MSELoss()
 
         # metrics, tracked.
@@ -373,34 +251,6 @@ class PointNerf(Model):
 
 
     def load_state_dict_from_init(self, state_dict):
-        # # block1 -> mlp_base
-        # self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
-        # self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
-        # self.mlp_base.layers[1].weight.data = state_dict["aggregator.block1.2.weight"]
-        # self.mlp_base.layers[1].bias.data = state_dict["aggregator.block1.2.bias"]
-
-        # # block3 -> mlp_head
-        # self.mlp_head.layers[0].weight.data = state_dict["aggregator.block3.0.weight"]
-        # self.mlp_head.layers[0].bias.data = state_dict["aggregator.block3.0.bias"]
-        # self.mlp_head.layers[1].weight.data = state_dict["aggregator.block3.2.weight"]
-        # self.mlp_head.layers[1].bias.data = state_dict["aggregator.block3.2.bias"]
-
-        # # color_branch -> mlp_color
-        # self.mlp_color.layers[0].weight.data = state_dict["aggregator.color_branch.0.weight"]
-        # self.mlp_color.layers[0].bias.data = state_dict["aggregator.color_branch.0.bias"]
-        # self.mlp_color.layers[1].weight.data = state_dict["aggregator.color_branch.2.weight"]
-        # self.mlp_color.layers[1].bias.data = state_dict["aggregator.color_branch.2.bias"]
-        # self.mlp_color.layers[2].weight.data = state_dict["aggregator.color_branch.4.weight"]
-        # self.mlp_color.layers[2].bias.data = state_dict["aggregator.color_branch.4.bias"]
-
-        # # color_branch.6 -> field_output_color
-        # self.field_output_color.net.weight.data = state_dict["aggregator.color_branch.6.weight"]
-        # self.field_output_color.net.bias.data = state_dict["aggregator.color_branch.6.bias"]
-
-        # # alpha_branch.0 -> field_output_density
-        # self.field_output_density.net.weight.data = state_dict["aggregator.alpha_branch.0.weight"]
-        # self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
-
         # neural points
         self.points_xyz = state_dict["neural_points.xyz"].to(self._device)
         self.points_embeding = state_dict["neural_points.points_embeding"].to(self._device)
@@ -533,7 +383,7 @@ class PointNerf(Model):
         def gradiant_clamp(sampled_conf, min=0.0001, max=1):
             diff = sampled_conf - torch.clamp(sampled_conf, min=min, max=max)
             return sampled_conf - diff.detach()
-        conf_coefficient = gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)
+        # conf_coefficient = gradiant_clamp(sampled_conf[..., 0], min=0.0001, max=1)
         # del sampled_conf
 
         # viewmlp
@@ -562,7 +412,7 @@ class PointNerf(Model):
         feat = torch.cat([feat, self.feature_encoding.forward(feat)], dim=-1)
         feat = torch.cat([feat, dists_flat], dim=-1)
         weight = weight.view(B * R * SR, K, 1)
-        pts = pts_pnt
+        # pts = pts_pnt
         # print("feat",feat.shape) # 501
         feat = self.mlp_base(feat)
 
@@ -740,15 +590,6 @@ class PointNerf(Model):
         return weights, embedding
     
     def get_hyperparameters(self, vsize_np, point_xyz_w_tensor, ranges=None):
-        '''
-        :param l:
-        :param h:
-        :param w:
-        :param zdim:
-        :param ydim:
-        :param xdim:
-        :return:
-        '''
         min_xyz, max_xyz = torch.min(point_xyz_w_tensor, dim=-2)[0][0], torch.max(point_xyz_w_tensor, dim=-2)[0][0]
         ranges_min = torch.as_tensor(ranges[:3], dtype=torch.float32, device=min_xyz.device)
         ranges_max = torch.as_tensor(ranges[3:], dtype=torch.float32, device=min_xyz.device)
@@ -840,10 +681,6 @@ class PointNerf(Model):
         coarse_point_opacity_tensor = torch.zeros([B, OR, output["coarse_point_opacity"].shape[2]], dtype=output["coarse_point_opacity"].dtype, device=output["coarse_point_opacity"].device)
         coarse_point_opacity_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_point_opacity"]
         output["coarse_point_opacity"] = coarse_point_opacity_tensor.squeeze(0)
-
-        # queried_shading_tensor = torch.ones([B, OR, output["queried_shading"].shape[2]], dtype=output["queried_shading"].dtype, device=output["queried_shading"].device)
-        # queried_shading_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["queried_shading"]
-        # output["queried_shading"] = queried_shading_tensor
 
         return output
     
