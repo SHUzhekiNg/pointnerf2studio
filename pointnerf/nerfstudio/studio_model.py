@@ -239,6 +239,8 @@ class PointNerf(Model):
         self.density_act = torch.nn.ReLU()
         self.color_act = torch.nn.Sigmoid()
 
+        self._background_color = nerfstudio.utils.colors.WHITE
+        
         # losses
         self.rgb_loss = MSELoss()
 
