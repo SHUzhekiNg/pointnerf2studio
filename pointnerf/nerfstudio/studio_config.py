@@ -25,8 +25,8 @@ pointnerf_config = TrainerConfig(
         # ),
         datamanager=PointNerfDataManagerConfig(
             _target=PointNerfDataManager,
-            eval_num_rays_per_batch=8192,
-            train_num_rays_per_batch=8192,
+            eval_num_rays_per_batch=4096,
+            train_num_rays_per_batch=4096,
         ),
         model=PointNerfConfig(
         	_target=PointNerf,

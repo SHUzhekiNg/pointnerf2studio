@@ -663,7 +663,7 @@ class PointNerf(Model):
         masked_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
         masked_gt = torch.masked_select(image, (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
         ray_masked_coarse_raycolor_loss = self.rgb_loss(masked_gt, masked_output)
-        coarse_raycolor_loss = self.rgb_loss(image.unsqueeze(0), outputs["coarse_raycolor"])
+        coarse_raycolor_loss = self.rgb_loss(image, outputs["coarse_raycolor"])
         
         loss_dict = {
             "ray_masked_coarse_raycolor_loss": ray_masked_coarse_raycolor_loss,
@@ -677,7 +677,9 @@ class PointNerf(Model):
         self, outputs: Dict[str, torch.Tensor], batch: Dict[str, torch.Tensor]
     ) -> Tuple[Dict[str, float], Dict[str, torch.Tensor]]:
         image = batch["image"].to(outputs["coarse_raycolor"].device)
-        rgb = outputs["coarse_raycolor"]
+        outputs['ray_masked_coarse_raycolor'] = outputs["coarse_raycolor"].reshape(800, 800, 3)
+        outputs['ray_masked_coarse_raycolor'][outputs["ray_mask"].view(800, 800) <= 0,:] = 0.0
+        rgb = outputs["ray_masked_coarse_raycolor"]
         # acc = colormaps.apply_colormap(outputs["accumulation"])
         # depth = colormaps.apply_depth_colormap(
         #     outputs["depth"],
