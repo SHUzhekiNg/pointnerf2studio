@@ -41,21 +41,16 @@ from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager, Va
 @dataclass
 class PointNerfDataManagerConfig(VanillaDataManagerConfig):
     _target: Type = field(default_factory=lambda: VanillaDataManager)
-    # patch_tile_size_range: Tuple[int, int] = (0.05, 0.5)
-    # patch_tile_size_res: int = 7
-    # patch_stride_scaler: float = 0.5
     
-    # from global.parser
-
     # from nerf_synth360_ft_dataset.parser
     random_sample: str = "none"     # random sample pixels
-    random_sample_size: int = 70  # number of random samples
+    random_sample_size: int = 70    # number of random samples
     init_view_num: int = 3          # number of random samples
     shape_id: int = 0               # shape id
     trgt_id: int = 0                # shape id
     num_nn: int = 1                 # number of nearest views in a batch
-    near_plane: float = 2.0       # Near clipping plane, by default it is computed according to the distance of the camera 
-    far_plane: float = 6.0        # Far clipping plane, by default it is computed according to the distance of the camera
+    near_plane: float = 2.0         # Near clipping plane, by default it is computed according to the distance of the camera 
+    far_plane: float = 6.0          # Far clipping plane, by default it is computed according to the distance of the camera
     # bg_color: str = "white"         # background color, white|black(None)|random|rgb (float, float, float)
     # bg_filtering: int = 0           # 0 for alpha channel filtering, 1 for background color filtering
     # scan: str = "scan1"
@@ -110,22 +105,13 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         image_batch = {
             "image_idx": torch.tensor(image_idx).unsqueeze(0),
             "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)
-        }  # next(self.iter_train_image_dataloader)
+        }
         assert self.train_pixel_sampler is not None
         batch = self.train_pixel_sampler.sample(image_batch)
         ray_indices = batch["indices"]
         ray_bundle = self.train_ray_generator(ray_indices)
 
-        # h = self.train_dataset.cameras[0].height.item()
-        # w = self.train_dataset.cameras[0].width.item()
-        # px = np.random.randint(0, w, size=(self.config.random_sample_size,
-        #                                  self.config.random_sample_size)).astype(np.float32)
-        # py = np.random.randint(0, h, size=(self.config.random_sample_size,
-        #                                  self.config.random_sample_size)).astype(np.float32)
-        # ray_bundle.metadata["pixel_idx"] = np.stack((px, py), axis=-1).astype(np.float32)
         ray_bundle.metadata["camrotc2w"] = self.train_dataset.cameras[ray_bundle.camera_indices.cpu()].camera_to_worlds[0][0][0:3, 0:3]
-        # ray_bundle.metadata["h"] = h
-        # ray_bundle.metadata["w"] = w
 
         return ray_bundle, batch
     
@@ -137,22 +123,13 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         image_batch = {
             "image_idx": torch.tensor(image_idx).unsqueeze(0),
             "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)
-        }  # next(self.iter_train_image_dataloader)
+        } 
         assert self.eval_pixel_sampler is not None
         batch = self.eval_pixel_sampler.sample(image_batch)
         ray_indices = batch["indices"]
         ray_bundle = self.eval_ray_generator(ray_indices)
 
-        # h = self.train_dataset.cameras[0].height.item()
-        # w = self.train_dataset.cameras[0].width.item()
-        # px = np.random.randint(0, w, size=(self.config.random_sample_size,
-        #                                  self.config.random_sample_size)).astype(np.float32)
-        # py = np.random.randint(0, h, size=(self.config.random_sample_size,
-        #                                  self.config.random_sample_size)).astype(np.float32)
-        # ray_bundle.metadata["pixel_idx"] = np.stack((px, py), axis=-1).astype(np.float32)
         ray_bundle.metadata["camrotc2w"] = self.eval_dataset.cameras[ray_bundle.camera_indices.cpu()].camera_to_worlds[0][0][0:3, 0:3]
-        # ray_bundle.metadata["h"] = h
-        # ray_bundle.metadata["w"] = w
 
         return ray_bundle, batch
     
@@ -163,25 +140,4 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
             camera_ray_bundle.metadata["camrotc2w"] = self.eval_dataset.cameras[image_idx].camera_to_worlds[0:3, 0:3].unsqueeze(0).unsqueeze(0).expand(800, 800, -1, -1).reshape(800, 800, -1)
             return image_idx, camera_ray_bundle, batch
         raise ValueError("No more eval images")
-        # self.eval_count += 1
-        # image_batch = next(self.iter_eval_image_dataloader)
-        # image_idx = (self.eval_count-1) % image_batch["image_idx"].shape[0]
-        # image_batch = {
-        #     "image_idx": torch.tensor(image_idx).unsqueeze(0),
-        #     "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)
-        # }  # next(self.iter_train_image_dataloader)
-        # assert self.eval_pixel_sampler is not None
-        # batch = self.eval_pixel_sampler.sample(image_batch)
-        # ray_indices = batch["indices"]
-        # ray_bundle = self.eval_ray_generator(ray_indices)
-
-        # # h = self.train_dataset.cameras[0].height.item()
-        # # w = self.train_dataset.cameras[0].width.item()
-        # # px = np.random.randint(0, w, size=(self.config.random_sample_size,
-        # #                                  self.config.random_sample_size)).astype(np.float32)
-        # # py = np.random.randint(0, h, size=(self.config.random_sample_size,
-        # #                                  self.config.random_sample_size)).astype(np.float32)
-        # # ray_bundle.metadata["pixel_idx"] = np.stack((px, py), axis=-1).astype(np.float32)
-        # ray_bundle.metadata["camrotc2w"] = self.eval_dataset.cameras[ray_bundle.camera_indices.cpu()].camera_to_worlds[0][0][0:3, 0:3]
-        # return image_idx, ray_bundle, batch
         

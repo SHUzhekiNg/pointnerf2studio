@@ -36,7 +36,6 @@ class PointNerfPipeline(VanillaPipeline):
         self.datamanager.to(device)
         assert self.datamanager.train_dataset is not None, "Missing input dataset"
         kwargs = {}
-        # Loaded pointcloud must be transformed using the transform from the Dataparser
         self._model = config.model.setup(
             scene_box=self.datamanager.train_dataset.scene_box,
             num_train_data=len(self.datamanager.train_dataset),
