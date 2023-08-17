@@ -126,3 +126,5 @@ data_src
 checkpoints/nerfsynth
 outputs
 *.ckpt
+
+pointnerf/checkpoints

@@ -1,6 +1,6 @@
 #!/bin/bash
-nrCheckpoint="../../../../pointnerf/checkpoints"
-nrDataRoot="../../../../pointnerf/data_src"
+nrCheckpoint="../checkpoints"
+nrDataRoot="../data_src"
 name='chair'
 
 resume_iter=best #
