@@ -22,11 +22,11 @@ Install the dependent libraries as follows:
 pip install h5py imageio scikit-image plyfile
 ```
 
-- Install Nerfstudio following: 
+- Install **Nerfstudio** following: 
 
   https://docs.nerf.studio/en/latest/quickstart/installation.html
 
-- Install torch_scatter following:
+- Install **torch_scatter** following:
   
   https://github.com/rusty1s/pytorch_scatter
 
@@ -37,12 +37,57 @@ pip install git+https://github.com/SHUzhekiNg/pointnerf2studio
 
 ## Run
 
-1. generate point cloud using MVSNet with:
+1. Prepare data following the original **PointNeRF** repository's [README.md](https://github.com/Xharlie/pointnerf/tree/master#data-preparation)
+
+   And the layout in **pointnerf2studio** should look like this.
+
+   ```
+   pointnerf2studio
+   ├── pointnerf
+       ├── data_src
+       │   ├── dtu
+           │   │   │──Cameras
+           │   │   │──Depths
+           │   │   │──Depths_raw
+           │   │   │──Rectified
+           ├── nerf
+           │   │   │──nerf_synthetic
+           │   │   │──nerf_synthetic_colmap
+           ├── TanksAndTemple
+           ├── scannet
+           │   │   │──scans 
+           |   │   │   │──scene0101_04
+           |   │   │   │──scene0241_01
+   ```
+
+2. generate neural point cloud using MVSNet with:
+
    ```sh
    bash pointnerf/dev_scripts/w_n360/chair_points.sh
    ```
 
-2. run nerfstudio with:
+3. run pointnerf2studio with blender datasets:
    ```sh
-   ns-train pointnerf-original --pipeline.model.path-point-cloud ....../pointnerf2studio/checkpoints/nerfsynth/chair blender-data --data ....../pointnerf2studio/pointnerf/data_src/nerf/nerf_synthetic/chair
+   ns-train pointnerf-original \
+   --pipeline.model.path-point-cloud \
+   PATH_TO_POINTNERF2STUDIO/checkpoints/nerfsynth/<scene_name>
+   blender-data \
+   --data \
+   PATH_TO_POINTNERF2STUDIO/pointnerf/data_src/nerf/nerf_synthetic/<scene_name>
    ```
+
+
+
+## Reference
+
+This project is referred to <strong>Point-NeRF: Point-based Neural Radiance Fields</strong>.
+
+```
+@inproceedings{xu2022point,
+  title={Point-nerf: Point-based neural radiance fields},
+  author={Xu, Qiangeng and Xu, Zexiang and Philip, Julien and Bi, Sai and Shu, Zhixin and Sunkavalli, Kalyan and Neumann, Ulrich},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={5438--5448},
+  year={2022}
+}
+```
