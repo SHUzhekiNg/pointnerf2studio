@@ -18,7 +18,7 @@ Install the dependent libraries as follows:
 
 - Install the dependent python libraries:
 
-```
+```shell
 pip install h5py imageio scikit-image plyfile
 ```
 
@@ -31,8 +31,18 @@ pip install h5py imageio scikit-image plyfile
   https://github.com/rusty1s/pytorch_scatter
 
 ### Install
-```
+```sh
 pip install git+https://github.com/SHUzhekiNg/pointnerf2studio
 ```
 
-## 
+## Run
+
+1. generate point cloud using MVSNet with:
+   ```sh
+   bash pointnerf/dev_scripts/w_n360/chair_points.sh
+   ```
+
+2. run nerfstudio with:
+   ```sh
+   ns-train pointnerf-original --pipeline.model.path-point-cloud ....../pointnerf2studio/checkpoints/nerfsynth/chair blender-data --data ....../pointnerf2studio/pointnerf/data_src/nerf/nerf_synthetic/chair
+   ```
