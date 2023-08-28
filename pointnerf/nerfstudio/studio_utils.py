@@ -76,7 +76,7 @@ class NeuralPoints(nn.Module):
         self.query_worldcoords_cuda = load_cuda(
             name='query_worldcoords_cuda',
             sources=[
-                os.path.join("/data/zhenglc/pointnerf2studio/pointnerf/models/neural_points", path)
+                os.path.join(os.getcwd()+"/pointnerf/models/neural_points", path)
                 for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
             verbose=True)
         
