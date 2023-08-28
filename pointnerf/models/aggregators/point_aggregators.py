@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from ..helpers.networks import init_seq, positional_encoding, PointNeRFEncoding
+from ..helpers.networks import init_seq, positional_encoding
 from utils.spherical import SphericalHarm_table as SphericalHarm
 from ..helpers.geometrics import compute_world2local_dist
 from nerfstudio.field_components.encodings import NeRFEncoding
@@ -521,13 +521,7 @@ class PointAggregator(torch.nn.Module):
                     pts_pnt=pts_pnt[pnt_mask_flat, :]
         viewdirs = viewdirs @ sampled_Rw2c if uni_w2c else (viewdirs[..., None, :] @ sampled_Rw2c_ray).squeeze(-2)
         if self.num_viewdir_freqs > 0:
-            # viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)
-            _viewdirs = PointNeRFEncoding(  # NeRFEncoding
-                in_dim=2,
-                num_frequencies=self.num_viewdir_freqs,  # 4
-                ori=True,
-            )
-            viewdirs = _viewdirs.forward(viewdirs)
+            viewdirs = positional_encoding(viewdirs, self.num_viewdir_freqs, ori=True)
             ori_viewdirs, viewdirs = viewdirs[..., :3], viewdirs[..., 3:]
 
 
@@ -549,12 +543,6 @@ class PointAggregator(torch.nn.Module):
             if self.opt.dist_xyz_freq != 0:
                 # print(dists.dtype, (self.opt.dist_xyz_deno * np.linalg.norm(vsize)).dtype, dists_flat.dtype)
                 dists_flat = positional_encoding(dists_flat, self.opt.dist_xyz_freq)
-                _dists_flat = PointNeRFEncoding(  # NeRFEncoding
-                    in_dim=2,
-                    num_frequencies=self.opt.dist_xyz_freq,  # 5
-                    ori=True,
-                )
-                dists_flatt = _dists_flat(dists_flat)
             feat= sampled_embedding.view(-1, sampled_embedding.shape[-1])
             # print("feat", feat.shape)
 

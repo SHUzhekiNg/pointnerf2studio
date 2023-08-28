@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 import torch
 import yaml
 import numpy as np
+import random
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.utils.nerfstudio_collate import nerfstudio_collate
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
@@ -101,7 +102,7 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         """Returns the next batch of data from the train dataloader."""
         self.train_count += 1
         image_batch = next(self.iter_train_image_dataloader)
-        image_idx = (self.train_count-1) % image_batch["image_idx"].shape[0]
+        image_idx = random.randint(0, image_batch["image_idx"].shape[0] - 1) #  (self.train_count-1) % image_batch["image_idx"].shape[0]
         image_batch = {
             "image_idx": torch.tensor(image_idx).unsqueeze(0),
             "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)
@@ -119,7 +120,7 @@ class PointNerfDataManager(VanillaDataManager):  # pylint: disable=abstract-meth
         """Returns the next batch of data from the train dataloader."""
         self.eval_count += 1
         image_batch = next(self.iter_eval_image_dataloader)
-        image_idx = (self.eval_count-1) % image_batch["image_idx"].shape[0]
+        image_idx = random.randint(0, image_batch["image_idx"].shape[0] - 1) # (self.eval_count-1) % image_batch["image_idx"].shape[0]
         image_batch = {
             "image_idx": torch.tensor(image_idx).unsqueeze(0),
             "image": image_batch["image"][torch.nonzero(image_batch["image_idx"] == image_idx).squeeze()].unsqueeze(0)

@@ -6,10 +6,7 @@ from torch.optim import lr_scheduler
 import torch.nn.functional as F
 import numpy as np
 from nerfstudio.utils.printing import print_tcnn_speed_warning
-from nerfstudio.field_components.encodings import Encoding
-from typing import Literal, Optional, Sequence
-from jaxtyping import Float, Int, Shaped
-from torch import Tensor
+
 
 def get_nonlinearity_layer(activation_type='PReLU'):
     if activation_type == 'ReLU':
@@ -194,25 +191,3 @@ def positional_encoding(positions, freqs, ori=False):
     return pts
 
 
-class PointNeRFEncoding(Encoding):
-    def __init__(
-        self,
-        in_dim: int,
-        num_frequencies: int,
-        ori: bool = False,
-    ) -> None:
-        super().__init__(in_dim)
-        self.num_frequencies = num_frequencies
-        self.ori = ori        
-
-    def forward(
-        self, in_tensor: Float[Tensor, "*bs input_dim"], covs: Optional[Float[Tensor, "*bs input_dim input_dim"]] = None
-    ) -> Float[Tensor, "*bs output_dim"]:
-        freq_bands = (2**torch.arange(self.num_frequencies).float()).to(in_tensor.device)  # (F,)
-        ori_c = in_tensor.shape[-1]
-        pts = (in_tensor[..., None] * freq_bands).reshape(in_tensor.shape[:-1] + (self.num_frequencies * in_tensor.shape[-1], ))  # (..., DF)
-        if self.ori:
-            pts = torch.cat([in_tensor, torch.sin(pts), torch.cos(pts)], dim=-1).reshape(pts.shape[:-1]+(pts.shape[-1]*2+ori_c,))
-        else:
-            pts = torch.stack([torch.sin(pts), torch.cos(pts)], dim=-1).reshape(pts.shape[:-1]+(pts.shape[-1]*2,))
-        return pts
