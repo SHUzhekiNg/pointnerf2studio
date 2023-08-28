@@ -28,7 +28,7 @@ pointnerf_config = TrainerConfig(
     max_num_iterations=200000, # 200000
     steps_per_save=25000,
     steps_per_eval_batch=1000,  # 1000
-    steps_per_eval_image=1000,  
+    steps_per_eval_image=2000,  
     steps_per_eval_all_images=100000,
     optimizers={
         "fields": {

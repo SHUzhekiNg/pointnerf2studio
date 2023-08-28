@@ -123,8 +123,7 @@ viewer/breeze_rc.py
 viewer/testData
 
 data_src
-checkpoints/nerfsynth
+checkpoints
 outputs
-*.ckpt
 
 pointnerf/checkpoints

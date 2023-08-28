@@ -1,5 +1,5 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
 name='chair'
 
@@ -118,7 +118,7 @@ lr_decay_exp=0.1
 #lr_decay_iters=-1
 
 gpu_ids='0'
-checkpoints_dir="${nrCheckpoint}/nerfsynth/"
+checkpoints_dir="checkpoints/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
