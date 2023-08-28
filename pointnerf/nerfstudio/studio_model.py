@@ -10,16 +10,14 @@ import numpy as np
 import glob
 import nerfstudio.utils
 import torch
-from nerfstudio.cameras.rays import RayBundle, RaySamples
+from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.field_components.field_heads import (
     DensityFieldHead,
-    FieldHeadNames,
     RGBFieldHead,
 )
 from nerfstudio.field_components.mlp import MLP
 from nerfstudio.model_components import renderers
 from nerfstudio.model_components.losses import MSELoss
-from nerfstudio.model_components.ray_samplers import PDFSampler, Sampler, UniformSampler
 from nerfstudio.model_components.renderers import (
     AccumulationRenderer,
     DepthRenderer,
@@ -163,36 +161,6 @@ class PointNerf(Model):
             if isinstance(self, nn.DataParallel):
                 self = self.module
             self.neural_points = NeuralPoints(state_dict, self._device, self.config)
-
-            # block1 -> mlp_base
-            # assert type(self.mlp_base)
-            # self.mlp_base.layers[0].weight.data = state_dict["aggregator.block1.0.weight"]
-            # self.mlp_base.layers[0].bias.data = state_dict["aggregator.block1.0.bias"]
-            # self.mlp_base.layers[1].weight.data = state_dict["aggregator.block1.2.weight"]
-            # self.mlp_base.layers[1].bias.data = state_dict["aggregator.block1.2.bias"]
-
-            # # block3 -> mlp_head
-            # self.mlp_head.layers[0].weight.data = state_dict["aggregator.block3.0.weight"]
-            # self.mlp_head.layers[0].bias.data = state_dict["aggregator.block3.0.bias"]
-            # self.mlp_head.layers[1].weight.data = state_dict["aggregator.block3.2.weight"]
-            # self.mlp_head.layers[1].bias.data = state_dict["aggregator.block3.2.bias"]
-
-            # # color_branch -> mlp_color
-            # self.mlp_color.layers[0].weight.data = state_dict["aggregator.color_branch.0.weight"]
-            # self.mlp_color.layers[0].bias.data = state_dict["aggregator.color_branch.0.bias"]
-            # self.mlp_color.layers[1].weight.data = state_dict["aggregator.color_branch.2.weight"]
-            # self.mlp_color.layers[1].bias.data = state_dict["aggregator.color_branch.2.bias"]
-            # self.mlp_color.layers[2].weight.data = state_dict["aggregator.color_branch.4.weight"]
-            # self.mlp_color.layers[2].bias.data = state_dict["aggregator.color_branch.4.bias"]
-
-            # # color_branch.6 -> field_output_color
-            # self.field_output_color.net.weight.data = state_dict["aggregator.color_branch.6.weight"]
-            # self.field_output_color.net.bias.data = state_dict["aggregator.color_branch.6.bias"]
-
-            # # alpha_branch.0 -> field_output_density
-            # self.field_output_density.net.weight.data = state_dict["aggregator.alpha_branch.0.weight"]
-            # self.field_output_density.net.bias.data = state_dict["aggregator.alpha_branch.0.bias"]
-
             self._point_initialized = True
         else:
             raise RuntimeError("The point_cloud_path must be specified.")
@@ -240,7 +208,7 @@ class PointNerf(Model):
             out_activation=nn.LeakyReLU(0.1, True),
         )
 
-        # color and density, w/ simplified.
+        # color and density, simplified.
         color_in_dim = self.mlp_head.get_out_dim() + 2 * self.config.num_viewdir_freqs * 3 
         self.mlp_color = MLP(
             in_dim=color_in_dim,
@@ -249,17 +217,14 @@ class PointNerf(Model):
             activation=nn.LeakyReLU(0.1, True),
             out_activation=nn.LeakyReLU(0.1, True),
         )
-        self.field_output_color = RGBFieldHead(in_dim=self.mlp_color.get_out_dim())
-        self.field_output_density = DensityFieldHead(in_dim=self.mlp_head.get_out_dim())
-
-        self.density_super_act = torch.nn.Softplus()
-        self.density_act = torch.nn.ReLU()
-        self.color_act = torch.nn.Sigmoid()
+        self.field_output_color = RGBFieldHead(in_dim=self.mlp_color.get_out_dim(),activation=torch.nn.Sigmoid())
+        self.field_output_density = DensityFieldHead(in_dim=self.mlp_head.get_out_dim(),activation=torch.nn.ReLU()) # or Sigmoid
 
         self._background_color = nerfstudio.utils.colors.WHITE
-        
+        self.rgb_renderer = RGBRenderer(background_color=self._background_color)
+
         # losses
-        self.miss_loss = MSELoss()
+        # self.miss_loss = MSELoss()
         self.mask_loss = MSELoss()
         self.rgb_loss = MSELoss()
 
@@ -267,8 +232,8 @@ class PointNerf(Model):
         self.psnr = PeakSignalNoiseRatio(data_range=1.0)
         self.skimage_ssim = skimage_ssim
         self.skimage_rmse = skimage_rmse
-        # self.lpips = LearnedPerceptualImagePatchSimilarity()
-        # self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
+        self.lpips = LearnedPerceptualImagePatchSimilarity()
+        self.lpips_vgg = LearnedPerceptualImagePatchSimilarity(net_type="vgg")
 
 
     # dont know
@@ -380,8 +345,8 @@ class PointNerf(Model):
         feat = self.mlp_head(feat)
         # del sampled_dir, sampled_color
 
-        alpha_in = self.field_output_density(feat)
-        alpha = self.raw2out_density(alpha_in)
+        alpha = self.field_output_density(feat)
+        # alpha = self.raw2out_density(alpha_in)
         # print(alpha_in.shape, alpha_in)
         if self.config.apply_pnt_mask > 0:
             alpha_holder = torch.zeros([B * R * SR * K, alpha.shape[-1]], dtype=torch.float32, device=alpha.device)
@@ -404,7 +369,7 @@ class PointNerf(Model):
         color_in = torch.cat([color_in, viewdirs], dim=-1)
         color_in = self.mlp_color(color_in)
         color_in = self.field_output_color(color_in)
-        color_output = self.raw2out_color(color_in)
+        color_output = color_in * (1 + 2 * 0.001) - 0.001# self.raw2out_color(color_in)
         output_mlp = torch.cat([alpha, color_output], dim=-1)
 
         # print("output_placeholder", output_placeholder.shape)
@@ -428,19 +393,32 @@ class PointNerf(Model):
         output = {}
         # output["queried_shading"] = torch.logical_not(torch.any(ray_valid, dim=-1, keepdims=True)).repeat(1, 1, 3).to(torch.float32)
 
-        (
-            ray_color,
-            point_color,
-            opacity,
-            acc_transmission,
-            blend_weight,
-            background_transmission,
-            _,
-        ) = self.ray_march(ray_dist, ray_valid, decoded_features, self._background_color)
+        # we are essentially predicting predict 1 - e^-sigma
+        sigma = decoded_features[..., 0] * ray_valid.float()
+        opacity = 1 - torch.exp(-sigma * ray_dist)
+        # cumprod exclusive
+        acc_transmission = torch.cumprod(1. - opacity + 1e-10, dim=-1)
+        temp = torch.ones(opacity.shape[0:2] + (1, )).to(
+            opacity.device).float()  # N x R x 1
+        acc_transmission = torch.cat([temp, acc_transmission[:, :, :-1]], dim=-1)
+        blend_weight = (opacity*acc_transmission).unsqueeze(-1)
+        output["coarse_raycolor"] = self.rgb_renderer(
+            rgb = decoded_features[..., 1:4],
+            weights = blend_weight
+        )
+
+        # (
+        #     ray_color,
+        #     point_color,
+        #     opacity,
+        #     acc_transmission,
+        #     blend_weight,
+        #     background_transmission,
+        # ) = self.ray_march(ray_dist, ray_valid, decoded_features, self._background_color)
         # ray_color = self.tone_map(ray_color)
-        output["coarse_raycolor"] = ray_color
-        output["coarse_point_opacity"] = opacity
-        output["coarse_is_background"] = background_transmission.squeeze(0)
+        # output["coarse_raycolor"] = ray_color
+        # output["coarse_point_opacity"] = opacity
+        # output["coarse_is_background"] = background_transmission.squeeze(0)
         output["ray_mask"] = ray_mask_tensor
         # if weight is not None:
         #     output["weight"] = weight.detach()
@@ -451,7 +429,6 @@ class PointNerf(Model):
         if self.training:
             output["conf_coefficient"] = conf_coefficient
             
-
         return output
     
     def get_param_groups(self) -> Dict[str, List[Parameter]]:
@@ -476,14 +453,11 @@ class PointNerf(Model):
 
         masked_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
         masked_gt = torch.masked_select(image, (outputs["ray_mask"] > 0)[..., None].expand(-1, 3)).reshape(-1, 3)
-        miss_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] == 0)[..., None].expand(-1, 3)).reshape(-1, 3)
-        miss_gt = torch.masked_select(image, (outputs["ray_mask"] == 0)[..., None].expand(-1, 3)).reshape(-1, 3)
+        # miss_output = torch.masked_select(outputs["coarse_raycolor"], (outputs["ray_mask"] == 0)[..., None].expand(-1, 3)).reshape(-1, 3)
+        # miss_gt = torch.masked_select(image, (outputs["ray_mask"] == 0)[..., None].expand(-1, 3)).reshape(-1, 3)
         ray_masked_coarse_raycolor_loss = self.mask_loss(masked_gt, masked_output) + 1e-6
-        ray_miss_coarse_raycolor_loss = self.miss_loss(miss_gt, miss_output) * miss_gt.shape[0]
+        # ray_miss_coarse_raycolor_loss = self.miss_loss(miss_gt, miss_output) * miss_gt.shape[0]
         # coarse_raycolor_loss = self.rgb_loss(image, outputs["coarse_raycolor"])
-        
-        #conf_coefficient_loss = conf_coefficient_tensor.new_full((outputs["ray_mask"].shape[0],1), conf_coefficient_tensor.item())
-        # print("self.output[name]",torch.min(self.output[name]), torch.max(self.output[name]))
         # loss_total = conf_coefficient_loss + ray_masked_coarse_raycolor_loss
         
         loss_dict = {
@@ -522,14 +496,14 @@ class PointNerf(Model):
 
         psnr = self.psnr(image, rgb).item()
         ssim = self.skimage_ssim(image, rgb)
-        # lpips = self.lpips(image, rgb)
-        # lpips_vgg = self.lpips_vgg(image, rgb)
+        lpips = self.lpips(image, rgb)
+        lpips_vgg = self.lpips_vgg(image, rgb)
         rmse = self.skimage_rmse(image, rgb)
         metrics_dict = {
             "psnr": float(psnr),
             "ssim": float(ssim),
-            # "lpips": float(lpips),
-            # "lpips_vgg": float(lpips_vgg),
+            "lpips": float(lpips),
+            "lpips_vgg": float(lpips_vgg),
             "rmse": float(rmse)
         }
 
@@ -563,7 +537,8 @@ class PointNerf(Model):
         if self.config.act_super > 0:
             color = color * (1 + 2 * 0.001) - 0.001 # according to mip nerf, to stablelize the training
         return color
-            
+    
+
     def ray_march(self, ray_dist, ray_valid, ray_features, bg_color=None):
         # ray_dist: N x Rays x Samples
         # ray_valid: N x Rays x Samples
@@ -589,20 +564,16 @@ class PointNerf(Model):
 
         background_transmission = acc_transmission[:, :, [-1]]
         acc_transmission = torch.cat([temp, acc_transmission[:, :, :-1]], dim=-1)
-        
-        def alpha_blend(opacity, acc_transmission):
-            return opacity * acc_transmission
-        blend_weight = alpha_blend(opacity, acc_transmission)[..., None]
+
+        blend_weight = (opacity*acc_transmission).unsqueeze(-1)
 
         ray_color = torch.sum(point_color * blend_weight, dim=-2, keepdim=False)
         if bg_color is not None:
             ray_color += bg_color.to(opacity.device).float().view(
                 background_transmission.shape[0], 1, 3) * background_transmission
 
-        background_blend_weight = alpha_blend(1, background_transmission)
-
         return ray_color, point_color, opacity, acc_transmission, blend_weight, \
-            background_transmission, background_blend_weight
+            background_transmission
     
     def fill_invalid(self, output):
         # ray_mask:             torch.Size([1, 1024])
@@ -612,21 +583,21 @@ class PointNerf(Model):
         ray_mask = output["ray_mask"]
         B, OR = ray_mask.shape
         ray_inds = torch.nonzero(ray_mask) # 336, 2
-        coarse_is_background_tensor = torch.ones([B, OR, 1], dtype=output["coarse_is_background"].dtype, device=output["coarse_is_background"].device)
-        # print("coarse_is_background", output["coarse_is_background"].shape)
-        # print("coarse_is_background_tensor", coarse_is_background_tensor.shape)
-        # print("ray_inds", ray_inds.shape, ray_mask.shape)
-        coarse_is_background_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_is_background"]
-        output["coarse_is_background"] = coarse_is_background_tensor.squeeze(0)
-        output['coarse_mask'] = (1 - coarse_is_background_tensor).squeeze(0)
+        # coarse_is_background_tensor = torch.ones([B, OR, 1], dtype=output["coarse_is_background"].dtype, device=output["coarse_is_background"].device)
+        # # print("coarse_is_background", output["coarse_is_background"].shape)
+        # # print("coarse_is_background_tensor", coarse_is_background_tensor.shape)
+        # # print("ray_inds", ray_inds.shape, ray_mask.shape)
+        # coarse_is_background_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_is_background"]
+        # output["coarse_is_background"] = coarse_is_background_tensor.squeeze(0)
+        # output['coarse_mask'] = (1 - coarse_is_background_tensor).squeeze(0)
 
         coarse_raycolor_tensor = torch.ones([B, OR, 3], dtype=output["coarse_raycolor"].dtype, device=output["coarse_raycolor"].device) * self._background_color[None, ...].to("cuda")
         coarse_raycolor_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_raycolor"]
         output["coarse_raycolor"] = coarse_raycolor_tensor.squeeze(0)
 
-        coarse_point_opacity_tensor = torch.zeros([B, OR, output["coarse_point_opacity"].shape[2]], dtype=output["coarse_point_opacity"].dtype, device=output["coarse_point_opacity"].device)
-        coarse_point_opacity_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_point_opacity"]
-        output["coarse_point_opacity"] = coarse_point_opacity_tensor.squeeze(0)
+        # coarse_point_opacity_tensor = torch.zeros([B, OR, output["coarse_point_opacity"].shape[2]], dtype=output["coarse_point_opacity"].dtype, device=output["coarse_point_opacity"].device)
+        # coarse_point_opacity_tensor[ray_inds[..., 0], ray_inds[..., 1], :] = output["coarse_point_opacity"]
+        # output["coarse_point_opacity"] = coarse_point_opacity_tensor.squeeze(0)
 
         return output
     
