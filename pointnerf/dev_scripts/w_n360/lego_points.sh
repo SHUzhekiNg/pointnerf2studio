@@ -117,7 +117,7 @@ lr_decay_exp=0.1
 
 gpu_ids='0'
 
-checkpoints_dir="checkpoints/nerfsynth/"
+checkpoints_dir="../../checkpoints/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
@@ -158,7 +158,7 @@ vid=250000
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
 python3 gen_pnts.py \
         --experiment $name \
@@ -282,5 +282,3 @@ python3 gen_pnts.py \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
         --debug
-
-done

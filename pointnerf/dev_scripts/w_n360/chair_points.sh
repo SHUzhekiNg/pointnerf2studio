@@ -157,7 +157,7 @@ vid=250000
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
-cd run
+cd pointnerf/run
 
 python3 gen_pnts.py \
         --experiment $name \

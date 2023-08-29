@@ -99,14 +99,14 @@ class PointNerfConfig(ModelConfig):
     vscale: List[float] = dataclasses.field(default_factory=lambda: [2, 2, 2])
     vsize: List[float] = dataclasses.field(default_factory=lambda: [0.004, 0.004, 0.004])
     query_size: List[float] = dataclasses.field(default_factory=lambda: [3, 3, 3])
-    ranges: List[float] = dataclasses.field(default_factory=lambda: [-0.721, -0.695, -0.995, 0.658, 0.706, 1.050])
+    ranges: List[float] = dataclasses.field(default_factory=lambda: [-1.200, -1.200, -1.200, 1.200, 1.200, 1.200]) # [-0.721, -0.695, -0.995, 0.658, 0.706, 1.050])
     z_depth_dim: int = 400  # num_coarse_sample
 
     # "query"
     SR: int = 80
     K: int = 8
-    max_o: int = 410000
-    P: int = 12
+    max_o: int = 830000 # 410000
+    P: int = 9 # 12
     NN: int = 2
     gpu_maxthr: int = 1024 # 'number of coarse samples'
 

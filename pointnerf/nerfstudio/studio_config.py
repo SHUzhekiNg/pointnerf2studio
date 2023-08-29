@@ -22,7 +22,7 @@ pointnerf_config = TrainerConfig(
         ),
         model=PointNerfConfig(
         	_target=PointNerf,
-            eval_num_rays_per_chunk=2306,
+            eval_num_rays_per_chunk=2304,
     	),
     ),
     max_num_iterations=200000, # 200000
