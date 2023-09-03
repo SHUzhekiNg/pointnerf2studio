@@ -1,24 +1,23 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='barn'
+name='ship'
 
 resume_iter=best #
-data_root="${nrDataRoot}/TanksAndTemple/"
-scan="Barn"
+
+data_root="${nrDataRoot}/nerf/nerf_synthetic/"
+scan="ship"
 
 load_points=0
 feat_grad=1
 conf_grad=1
 dir_grad=1
 color_grad=1
-vox_res=640
+vox_res=320
 normview=0
 prune_thresh=0.1
 prune_iter=10001
-prune_max_iter=130000
-mvs_img_wh=" 1088 640 "
-img_wh=" 1088 640 "
+prune_max_iter=200000
 
 feedforward=0
 ref_vid=0
@@ -31,7 +30,7 @@ init_view_num=3
 pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
-geo_cnsst_num=2
+geo_cnsst_num=4
 full_comb=1
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -47,19 +46,20 @@ agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
 radius_limit_scale=4
 depth_limit_scale=0
-alpha_range=1
+alpha_range=0
 
-vscale=" 3 3 3 "
+vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.003 0.003 0.003 " #" 0.005 0.005 0.005 "
+vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
 max_o=1500000 #2000000
-ranges=" -2.05965 -0.48064 -2.23660 1.78036 0.6094 1.28341 "
-SR=40
+#ranges=" -1.0345 -0.5172 -0.6727 0.7255 0.4428 0.9273 "
+ranges=" -1.277 -1.300 -0.550 1.371 1.349 0.729 "
+SR=80
 K=8
-P=11
+P=10 #120
 NN=2
 
 
@@ -88,11 +88,11 @@ dist_xyz_deno=0
 
 
 raydist_mode_unit=1
-dataset_name='tt_ft'
-pin_data_in_memory=0
+dataset_name='nerf_synth360_ft'
+pin_data_in_memory=1
 model='mvs_points_volumetric'
-near_plane=0.0
-far_plane=4.5
+near_plane=2.0
+far_plane=6.0
 which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
 domain_size='1'
 dir_norm=0
@@ -106,24 +106,23 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=48 #48 # 32 * 32 = 1024
+
+random_sample_size=60 #48 # 32 * 32 = 1024
 
 batch_size=1
-
 plr=0.002
 lr=0.0005 # 0.0005 #0.00015
 lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='2'
-
-checkpoints_dir="${nrCheckpoint}/tanksntemples/"
+gpu_ids='0'
+checkpoints_dir="${nrCheckpoint}/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #300000 #800000
+maximum_step=10 #250000 #300000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
@@ -133,18 +132,18 @@ train_and_test=0 #1
 test_num=10
 test_freq=10000 #1200 #1200 #30184 #30184 #50000
 print_freq=40
-test_num_step=3
+test_num_step=10
 
-far_thresh=0.009
+far_thresh=-1 #0.005
 prob_freq=10001 #2000 #10001
 prob_num_step=20
-prob_thresh=0.7
+prob_thresh=0.5
 prob_mul=0.4
 prob_kernel_size=" 3 3 3 "
-prob_tiers=" 90000 "
+prob_tiers=" 150000 "
+
 
 zero_epsilon=1e-3
-
 visual_items=' coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
@@ -154,17 +153,14 @@ color_loss_weights=" 1.0 0.0 0.0 "
 color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor'
 test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
 
-vid=220000
+vid=250000
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-for i in $(seq 1 $prob_freq $maximum_step)
-
-do
-python3 train_ft.py \
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -276,17 +272,13 @@ python3 train_ft.py \
         --prob_mul $prob_mul \
         --prob_kernel_size $prob_kernel_size \
         --prob_tiers $prob_tiers \
-        --far_thresh $far_thresh \
         --alpha_range $alpha_range \
         --ranges $ranges \
-        --mvs_img_wh $mvs_img_wh \
-        --img_wh $img_wh \
         --vid $vid \
         --vsize $vsize \
         --max_o $max_o \
         --zero_one_loss_items $zero_one_loss_items \
         --zero_one_loss_weights $zero_one_loss_weights \
         --prune_max_iter $prune_max_iter \
+        --far_thresh $far_thresh \
         --debug
-
-done

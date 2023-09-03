@@ -1,21 +1,24 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='lego'
-resume_iter=best #
-data_root="${nrDataRoot}/nerf/nerf_synthetic_colmap/"
-scan="lego"
+name='materials'
 
-load_points=1
+resume_iter=best #
+save_point_freq=40
+
+data_root="${nrDataRoot}/nerf/nerf_synthetic/"
+scan="materials"
+
+load_points=0
 feat_grad=1
 conf_grad=1
 dir_grad=1
 color_grad=1
 vox_res=320
 normview=0
-prune_thresh=-1
-prune_iter=-1
-prune_max_iter=-1
+prune_thresh=0.1
+prune_iter=-10001
+prune_max_iter=130000
 
 feedforward=0
 ref_vid=0
@@ -46,18 +49,19 @@ radius_limit_scale=4
 depth_limit_scale=0
 alpha_range=0
 
-vscale=" 3 3 3 "
+vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=600000 #2000000
-ranges=" -0.638 -1.141 -0.346 0.634 1.149 1.141 "
+max_o=930000 #2000000
+ranges=" -1.123  -0.759 -0.232  1.072 0.986 0.200 "
 SR=80
 K=8
-P=13 #120
+P=9 #120
 NN=2
+
 
 act_type="LeakyReLU"
 
@@ -82,6 +86,7 @@ dist_xyz_freq=5
 num_feat_freqs=3
 dist_xyz_deno=0
 
+
 raydist_mode_unit=1
 dataset_name='nerf_synth360_ft'
 pin_data_in_memory=1
@@ -92,7 +97,7 @@ which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
 domain_size='1'
 dir_norm=0
 
-which_tonemap_func="off" #"gamma" #
+which_tonemap_func="off"
 which_render_func='radiance'
 which_blend_func='alpha'
 out_channels=4
@@ -112,12 +117,13 @@ lr_decay_iters=1000000
 lr_decay_exp=0.1
 
 gpu_ids='0'
-checkpoints_dir="${nrCheckpoint}/col_nerfsynth/"
+checkpoints_dir="../../checkpoints/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
+#resume_dir="${checkpoints_dir}/${name}"
 
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #800000
+maximum_step=200000 #300000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
@@ -130,16 +136,16 @@ print_freq=40
 test_num_step=10
 
 far_thresh=-1 #0.005
-prob_freq=10001 #10000 #2000 #1000 is bad #10001
-prob_num_step=25
+prob_freq=10001 #2000 #10001
+prob_num_step=20
 prob_thresh=0.7
 prob_mul=0.4
-prob_kernel_size=" 3 3 3 1 1 1 "
-prob_tiers=" 120000 160000 "
+prob_kernel_size=" 3 3 3 "
+prob_tiers=" 30000 "
 
 zero_epsilon=1e-3
 
-visual_items='coarse_raycolor gt_image '
+visual_items=' coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
@@ -153,13 +159,10 @@ vid=250000
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-for i in $(seq 1 $prob_freq $maximum_step)
-
-do
-python3 train_ft.py \
-       --experiment $name \
+python3 gen_pnts.py \
+        --experiment $name \
         --scan $scan \
         --data_root $data_root \
         --dataset_name $dataset_name \
@@ -254,12 +257,14 @@ python3 train_ft.py \
         --bgmodel $bgmodel \
         --vox_res $vox_res \
         --act_type $act_type \
+        --geo_cnsst_num $geo_cnsst_num \
         --point_conf_mode $point_conf_mode \
         --point_dir_mode $point_dir_mode \
         --point_color_mode $point_color_mode \
         --normview $normview \
         --prune_thresh $prune_thresh \
         --prune_iter $prune_iter \
+        --full_comb $full_comb \
         --sparse_loss_weight $sparse_loss_weight \
         --default_conf $default_conf \
         --prob_freq $prob_freq \
@@ -273,9 +278,8 @@ python3 train_ft.py \
         --vid $vid \
         --vsize $vsize \
         --max_o $max_o \
+        --zero_one_loss_items $zero_one_loss_items \
+        --zero_one_loss_weights $zero_one_loss_weights \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
         --debug
-done
-#        --zero_one_loss_items $zero_one_loss_items \
-#        --zero_one_loss_weights $zero_one_loss_weights \

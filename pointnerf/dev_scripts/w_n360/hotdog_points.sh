@@ -1,13 +1,12 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='lego'
+name='hotdog'
 
 resume_iter=best #
 save_point_freq=40
-
 data_root="${nrDataRoot}/nerf/nerf_synthetic/"
-scan="lego"
+scan="hotdog"
 
 load_points=0
 feat_grad=1
@@ -31,7 +30,7 @@ init_view_num=3
 pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
-geo_cnsst_num=0
+geo_cnsst_num=5
 full_comb=1
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
@@ -55,12 +54,13 @@ query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=830000 #2000000
-ranges=" -0.638 -1.141 -0.346 0.634 1.149 1.141 "
+max_o=1000000 #2000000
+ranges=" -1.198 -1.286 -0.190  1.198 1.110 0.312 "
 SR=80
 K=8
 P=9 #120
 NN=2
+
 
 act_type="LeakyReLU"
 
@@ -108,7 +108,6 @@ random_sample='random'
 
 random_sample_size=60 #48 # 32 * 32 = 1024
 batch_size=1
-
 plr=0.002
 lr=0.0005 # 0.0005 #0.00015
 lr_policy="iter_exponential_decay"
@@ -116,8 +115,7 @@ lr_decay_iters=1000000
 lr_decay_exp=0.1
 
 gpu_ids='0'
-
-checkpoints_dir="${nrCheckpoint}/nerfsynth/"
+checkpoints_dir="../../checkpoints/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
@@ -127,6 +125,7 @@ maximum_step=200000 #300000 #800000
 niter=10000 #1000000
 niter_decay=10000 #250000
 n_threads=1
+
 train_and_test=0 #1
 test_num=10
 test_freq=10000 #1200 #1200 #30184 #30184 #50000
@@ -144,7 +143,6 @@ prob_tiers=" 100000 "
 zero_epsilon=1e-3
 
 visual_items=' coarse_raycolor gt_image '
-#visual_items_additional=('coarse_mask' 'fine_mask') # show additional rendered items, here adding rendered masks
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
@@ -158,13 +156,10 @@ vid=250000
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-for i in $(seq 1 $prob_freq $maximum_step)
-
-do
 #python3 gen_pnts.py \
-python3 train_ft.py \
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -286,5 +281,3 @@ python3 train_ft.py \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
         --debug
-
-done

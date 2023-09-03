@@ -43,6 +43,7 @@ class PointNerfScheduler(Scheduler):
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=func)
         return scheduler
     
+
 class PointNeRFEncoding(Encoding):
     def __init__(
         self,
@@ -80,7 +81,6 @@ class NeuralPoints(nn.Module):
                 for path in ['cuda/query_worldcoords.cpp', 'cuda/query_worldcoords.cu']],
             verbose=True)
         
-        # TODO:
         self.points_xyz = nn.Parameter(state_dict["neural_points.xyz"].to(self.device)) # 
         self.points_embeding = nn.Parameter(state_dict["neural_points.points_embeding"].to(self.device))
         print("self.points_embeding", self.points_embeding.shape)
@@ -101,13 +101,7 @@ class NeuralPoints(nn.Module):
             self.points_color.requires_grad = config.color_grad
         if self.points_Rw2c is not None:
             self.points_Rw2c.requires_grad = False
-        
-        # self.last_points_xyz = self.points_xyz.clone()
-        # self.last_points_embeding = torch.zeros(self.points_embeding.shape, device=self.device, dtype=torch.float32)
-        # self.last_points_color = torch.zeros(self.points_color.shape, device=self.device, dtype=torch.float32)
-        # self.last_points_dir = torch.zeros(self.points_dir.shape, device=self.device, dtype=torch.float32)
-        # self.last_points_conf = torch.zeros(self.points_conf.shape, device=self.device, dtype=torch.float32)
-        
+         
         self.reg_weight = 0.
         self.kernel_size = np.asarray(self.config.kernel_size, dtype=np.int32)
         self.kernel_size_tensor = torch.as_tensor(self.kernel_size, device=self.device, dtype=torch.int32)
@@ -123,9 +117,6 @@ class NeuralPoints(nn.Module):
         ranges_min = torch.as_tensor(ranges[:3], dtype=torch.float32, device=min_xyz.device)
         ranges_max = torch.as_tensor(ranges[3:], dtype=torch.float32, device=min_xyz.device)
         if ranges is not None:
-            # print("min_xyz", min_xyz.shape)
-            # print("max_xyz", max_xyz.shape)
-            # print("ranges", ranges)
             min_xyz, max_xyz = torch.max(torch.stack([min_xyz, ranges_min], dim=0), dim=0)[0], torch.min(torch.stack([max_xyz, ranges_max], dim=0), dim=0)[0]
         min_xyz = min_xyz - torch.as_tensor(self.scaled_vsize_np * self.config.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
         max_xyz = max_xyz + torch.as_tensor(self.scaled_vsize_np * self.config.kernel_size / 2, device=min_xyz.device, dtype=torch.float32)
@@ -152,18 +143,6 @@ class NeuralPoints(nn.Module):
         y_pers = xyz_c[..., 1] / xyz_c[..., 2]
         return torch.stack([x_pers, y_pers, z_pers], dim=-1)
     
-
-    def null_grad(self):
-        self.points_embeding.grad = None
-        self.xyz.grad = None
-
-
-    def reg_loss(self):
-        return self.reg_weight * torch.mean(torch.pow(self.points_embeding, 2))
-
-    def passfunc(self, input, vsize):
-        return input
-
 
     def forward(self, ray_bundle):
         if ray_bundle.metadata["camrotc2w"].shape[0] != 3:
@@ -214,26 +193,15 @@ class NeuralPoints(nn.Module):
         B, R, SR, K = sample_pidx_tensor.shape
         sample_pidx_tensor = torch.clamp(sample_pidx_tensor, min=0).view(-1).long()
 
-        # assert torch.equal(self.last_points_xyz, self.points_xyz)
-        # self.last_points_xyz = self.points_xyz.clone()
-
         sample_loc_tensor = self.w2pers_loc(sample_loc_w_tensor, cam_rot_tensor, cam_pos_tensor)  # 
         point_xyz_pers_tensor = self.w2pers(self.points_xyz, cam_rot_tensor, cam_pos_tensor)  # 
-        
-        # assert not torch.equal(self.last_points_embeding, self.points_embeding)
-        # self.last_points_embeding = self.points_embeding.clone()
+
         sampled_embedding = torch.index_select(torch.cat([self.points_xyz[None, ...], point_xyz_pers_tensor, self.points_embeding], dim=-1), 1, sample_pidx_tensor).view(B, R, SR, K, self.points_embeding.shape[2]+self.points_xyz.shape[1]*2)
 
-        # assert not torch.equal(self.last_points_color,self.points_color)
-        # self.last_points_color = self.points_color.clone()
         sampled_color = None if self.points_color is None else torch.index_select(self.points_color, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_color.shape[2])
 
-        # assert not torch.equal(self.last_points_dir, self.points_dir)
-        # self.last_points_dir = self.points_dir.clone()
         sampled_dir = None if self.points_dir is None else torch.index_select(self.points_dir, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_dir.shape[2])
 
-        # assert not torch.equal(self.last_points_conf, self.points_conf)
-        # self.last_points_conf = self.points_conf.clone()
         sampled_conf = None if self.points_conf is None else torch.index_select(self.points_conf, 1, sample_pidx_tensor).view(B, R, SR, K, self.points_conf.shape[2])
 
         sampled_Rw2c = self.points_Rw2c if self.points_Rw2c.dim() == 2 else torch.index_select(self.points_Rw2c, 0, sample_pidx_tensor).view(B, R, SR, K, self.points_Rw2c.shape[1], self.points_Rw2c.shape[2])

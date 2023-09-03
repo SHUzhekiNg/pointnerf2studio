@@ -1,13 +1,13 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='mic'
+name='ficus'
 
 resume_iter=best #
 save_point_freq=40
 
 data_root="${nrDataRoot}/nerf/nerf_synthetic/"
-scan="mic"
+scan="ficus"
 
 load_points=0
 feat_grad=1
@@ -17,8 +17,8 @@ color_grad=1
 vox_res=320
 normview=0
 prune_thresh=0.1
-prune_iter=-10001
-prune_max_iter=200000
+prune_iter=10001
+prune_max_iter=0
 
 feedforward=0
 ref_vid=0
@@ -55,13 +55,14 @@ query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=300000 #2000000
-ranges=" -1.252 -0.910 -0.742 0.767 1.082 1.151 "
+max_o=290000 #2000000
+#ranges=" -1.0345 -0.5172 -0.6727 0.7255 0.4428 0.9273 "
+ranges=" -0.377 -0.858 -1.034 0.555 0.578 1.141 "
 SR=80
 K=8
-P=9 #120
+P=12 #120
 NN=2
-inall_img=0
+
 
 act_type="LeakyReLU"
 
@@ -106,20 +107,21 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-random_sample_size=110 #48 # 32 * 32 = 1024
 
+random_sample_size=60 #48 # 32 * 32 = 1024
 batch_size=1
-plr=0.002
+
+plr=0.008
 lr=0.0005 # 0.0005 #0.00015
 lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
+#lr_policy="lambda"
+#lr_decay_iters=-1
 
-gpu_ids='3'
-
-checkpoints_dir="${nrCheckpoint}/nerfsynth/"
+gpu_ids='0'
+checkpoints_dir="../../checkpoints/nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
-#resume_dir="${checkpoints_dir}/${name}"
 
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
@@ -138,7 +140,7 @@ test_num_step=10
 far_thresh=-1 #0.005
 prob_freq=-10001 #2000 #10001
 prob_num_step=20
-prob_thresh=0.7
+prob_thresh=-0.7
 prob_mul=0.4
 prob_kernel_size=" 3 3 3 "
 prob_tiers=" 0 "
@@ -146,6 +148,7 @@ prob_tiers=" 0 "
 zero_epsilon=1e-3
 
 visual_items=' coarse_raycolor gt_image '
+
 sparse_loss_weight=0
 
 color_loss_weights=" 1.0 0.0 0.0 "
@@ -157,9 +160,9 @@ vid=250000
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-python3 train_ft.py \
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -278,5 +281,5 @@ python3 train_ft.py \
         --max_o $max_o \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
-        --inall_img $inall_img \
         --debug
+

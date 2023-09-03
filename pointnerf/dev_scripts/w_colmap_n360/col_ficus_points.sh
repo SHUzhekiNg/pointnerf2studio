@@ -1,10 +1,11 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='drums'
+name='ficus'
 resume_iter=best #
 data_root="${nrDataRoot}/nerf/nerf_synthetic_colmap/"
-scan="drums"
+scan="ficus"
 
 load_points=1
 feat_grad=1
@@ -13,9 +14,9 @@ dir_grad=1
 color_grad=1
 vox_res=320
 normview=0
-prune_thresh=-1
-prune_iter=10000
-prune_max_iter=30001
+prune_thresh=0.1
+prune_iter=30000
+prune_max_iter=100000
 
 feedforward=0
 ref_vid=0
@@ -44,17 +45,18 @@ radius_limit_scale=4
 depth_limit_scale=0
 alpha_range=0
 
-vscale=" 2 2 2 "
+vscale=" 3 3 3 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=400000 #2000000
-ranges=" -1.126 -0.746 -0.492 1.122 0.962 0.939 "
+max_o=290000 #2000000
+#ranges=" -1.0345 -0.5172 -0.6727 0.7255 0.4428 0.9273 "
+ranges=" -0.377 -0.858 -1.034 0.555 0.578 1.141 "
 SR=80
 K=8
-P=10 #120
+P=15 #120
 NN=2
 
 act_type="LeakyReLU"
@@ -79,6 +81,7 @@ shading_feature_num=256
 dist_xyz_freq=5
 num_feat_freqs=3
 dist_xyz_deno=0
+
 
 raydist_mode_unit=1
 dataset_name='nerf_synth360_ft'
@@ -107,8 +110,7 @@ lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-
-gpu_ids='3'
+gpu_ids='0'
 checkpoints_dir="${nrCheckpoint}/col_nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
@@ -126,18 +128,16 @@ test_freq=10000 #1200 #1200 #30184 #30184 #50000
 print_freq=40
 test_num_step=10
 
-
 far_thresh=-1 #0.005
 prob_freq=10001 #10000 #2000 #1000 is bad #10001
-prob_num_step=15
-prob_thresh=0.7
+prob_num_step=25
+prob_thresh=0.5
 prob_mul=0.4
 prob_kernel_size=" 3 3 3 1 1 1 "
-prob_tiers=" 100000 160000 "
+prob_tiers=" 110000 150000 "
 
 
 zero_epsilon=1e-3
-
 visual_items='coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
@@ -152,12 +152,13 @@ vid=250000
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-for i in $(seq 1 $prob_freq $maximum_step)
 
-do
-python3 train_ft.py \
+
+
+#python3 gen_pnts.py \
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -274,7 +275,7 @@ python3 train_ft.py \
         --max_o $max_o \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
+        --zero_one_loss_items $zero_one_loss_items \
+        --zero_one_loss_weights $zero_one_loss_weights \
         --debug
-done
-#        --zero_one_loss_items $zero_one_loss_items \
-#        --zero_one_loss_weights $zero_one_loss_weights \
+

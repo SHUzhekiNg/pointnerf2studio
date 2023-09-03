@@ -1,22 +1,21 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='chair'
-
+name='drums'
 resume_iter=best #
-data_root="${nrDataRoot}/nerf/nerf_synthetic/"
-scan="chair"
+data_root="${nrDataRoot}/nerf/nerf_synthetic_colmap/"
+scan="drums"
 
-load_points=0
+load_points=1
 feat_grad=1
 conf_grad=1
 dir_grad=1
 color_grad=1
 vox_res=320
 normview=0
-prune_thresh=0.1
-prune_iter=-10001
-prune_max_iter=200000
+prune_thresh=-1
+prune_iter=10000
+prune_max_iter=30001
 
 feedforward=0
 ref_vid=0
@@ -29,13 +28,11 @@ init_view_num=3
 pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
-geo_cnsst_num=2
-full_comb=1
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
 point_dir_mode="1" # 0 for only at features, 1 for color branch
 point_color_mode="1" # 0 for only at features, 1 for color branch
-default_conf=0.15 #1000
+default_conf=0.15
 
 agg_feat_xyz_mode="None"
 agg_alpha_xyz_mode="None"
@@ -53,13 +50,12 @@ query_size=" 3 3 3 "
 vsize=" 0.004 0.004 0.004 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=410000 #2000000
-ranges=" -0.721 -0.695 -0.995 0.658 0.706 1.050 "
+max_o=400000 #2000000
+ranges=" -1.126 -0.746 -0.492 1.122 0.962 0.939 "
 SR=80
 K=8
-P=12 #120
+P=10 #120
 NN=2
-
 
 act_type="LeakyReLU"
 
@@ -84,7 +80,6 @@ dist_xyz_freq=5
 num_feat_freqs=3
 dist_xyz_deno=0
 
-
 raydist_mode_unit=1
 dataset_name='nerf_synth360_ft'
 pin_data_in_memory=1
@@ -95,7 +90,7 @@ which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
 domain_size='1'
 dir_norm=0
 
-which_tonemap_func="off"
+which_tonemap_func="off" #"gamma" #
 which_render_func='radiance'
 which_blend_func='alpha'
 out_channels=4
@@ -104,47 +99,46 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-
-random_sample_size=60 #94 #48 # 32 * 32 = 1024
-#color_sample_fraction=0.8
-
+random_sample_size=70 #94 #48 # 32 * 32 = 1024
 batch_size=1
 plr=0.002
 lr=0.0005 # 0.0005 #0.00015
 lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
-#lr_policy="lambda"
-#lr_decay_iters=-1
+
 
 gpu_ids='0'
-checkpoints_dir="${nrCheckpoint}/nerfsynth/"
+checkpoints_dir="${nrCheckpoint}/col_nerfsynth/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #300000 #800000
+maximum_step=200000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
 n_threads=1
+
 train_and_test=0 #1
 test_num=10
 test_freq=10000 #1200 #1200 #30184 #30184 #50000
 print_freq=40
 test_num_step=10
 
+
 far_thresh=-1 #0.005
-prob_freq=10001 #2000 #10001
-prob_num_step=20
+prob_freq=10001 #10000 #2000 #1000 is bad #10001
+prob_num_step=15
 prob_thresh=0.7
 prob_mul=0.4
-prob_kernel_size=" 3 3 3 "
-prob_tiers=" 30100 "
+prob_kernel_size=" 3 3 3 1 1 1 "
+prob_tiers=" 100000 160000 "
+
 
 zero_epsilon=1e-3
 
-visual_items=' coarse_raycolor gt_image '
+visual_items='coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
@@ -157,13 +151,13 @@ vid=250000
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
-cd run
 
-for i in $(seq 1 $prob_freq $maximum_step)
+cd pointnerf/run
 
-do
-#python3 gen_pnts.py \
-python3 train_studio.py \
+
+
+
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -259,14 +253,12 @@ python3 train_studio.py \
         --bgmodel $bgmodel \
         --vox_res $vox_res \
         --act_type $act_type \
-        --geo_cnsst_num $geo_cnsst_num \
         --point_conf_mode $point_conf_mode \
         --point_dir_mode $point_dir_mode \
         --point_color_mode $point_color_mode \
         --normview $normview \
         --prune_thresh $prune_thresh \
         --prune_iter $prune_iter \
-        --full_comb $full_comb \
         --sparse_loss_weight $sparse_loss_weight \
         --default_conf $default_conf \
         --prob_freq $prob_freq \
@@ -280,10 +272,9 @@ python3 train_studio.py \
         --vid $vid \
         --vsize $vsize \
         --max_o $max_o \
-        --zero_one_loss_items $zero_one_loss_items \
-        --zero_one_loss_weights $zero_one_loss_weights \
         --prune_max_iter $prune_max_iter \
         --far_thresh $far_thresh \
         --debug
 
-done
+#        --zero_one_loss_items $zero_one_loss_items \
+#        --zero_one_loss_weights $zero_one_loss_weights \

@@ -1,29 +1,28 @@
 #!/bin/bash
-nrCheckpoint="../checkpoints"
+
+nrCheckpoint="../mvsnet_checkpoints"
 nrDataRoot="../data_src"
-name='caterpillar'
+name='scene241'
 
-resume_iter=best #
-data_root="${nrDataRoot}/TanksAndTemple/"
-scan="Caterpillar"
+resume_iter=best #latest
 
-load_points=0
+data_root="${nrDataRoot}/scannet/scans/"
+scan="scene0241_01"
+
+load_points=2
 feat_grad=1
 conf_grad=1
 dir_grad=1
 color_grad=1
-vox_res=640
+vox_res=900
 normview=0
-prune_thresh=0.1
-prune_iter=10001
-prune_max_iter=100000
-mvs_img_wh=" 1088 640 "
-img_wh=" 1088 640 "
+prune_thresh=-1
+prune_iter=-1
 
 feedforward=0
 ref_vid=0
 bgmodel="no" #"plane"
-depth_occ=1
+depth_occ=0
 depth_vid="0"
 trgt_id=0
 manual_depth_view=1
@@ -31,13 +30,14 @@ init_view_num=3
 pre_d_est="${nrCheckpoint}/MVSNet/model_000014.ckpt"
 manual_std_depth=0.0
 depth_conf_thresh=0.8
-geo_cnsst_num=3
-full_comb=0
+geo_cnsst_num=0
+edge_filter=10 # pixels crop out at image edge
+
 appr_feature_str0="imgfeat_0_0123 dir_0 point_conf"
 point_conf_mode="1" # 0 for only at features, 1 for multi at weight
 point_dir_mode="1" # 0 for only at features, 1 for color branch
 point_color_mode="1" # 0 for only at features, 1 for color branch
-default_conf=0.15 #1000
+default_conf=-1
 
 agg_feat_xyz_mode="None"
 agg_alpha_xyz_mode="None"
@@ -47,21 +47,18 @@ agg_axis_weight=" 1. 1. 1."
 agg_dist_pers=20
 radius_limit_scale=4
 depth_limit_scale=0
-alpha_range=1
-
 vscale=" 2 2 2 "
 kernel_size=" 3 3 3 "
 query_size=" 3 3 3 "
-vsize=" 0.002 0.002 0.002 " #" 0.005 0.005 0.005 "
+vsize=" 0.008 0.008 0.008 " #" 0.005 0.005 0.005 "
  
 z_depth_dim=400
-max_o=1800000 #2000000
-ranges=" -1.3345 -0.8172 -0.9727 0.9255 0.7428 1.3273 "
-SR=40
+max_o=610000
+ranges=" -10.0 -10.0 -10.0 10.0 10.0 10.0 "
+SR=24
 K=8
-P=10 #120
+P=26
 NN=2
-
 
 act_type="LeakyReLU"
 
@@ -71,7 +68,7 @@ weight_xyz_freq=2
 weight_feat_dim=8
 
 point_features_dim=32
-shpnt_jitter="uniform" #"uniform" # uniform gaussian
+shpnt_jitter="passfunc" #"uniform" # uniform gaussian
 
 which_agg_model="viewmlp"
 apply_pnt_mask=1
@@ -88,11 +85,11 @@ dist_xyz_deno=0
 
 
 raydist_mode_unit=1
-dataset_name='tt_ft'
-pin_data_in_memory=0
+dataset_name='scannet_ft'
+pin_data_in_memory=1
 model='mvs_points_volumetric'
-near_plane=0.0
-far_plane=3.0
+near_plane=0.1
+far_plane=8.0
 which_ray_generation='near_far_linear' #'nerf_near_far_linear' #
 domain_size='1'
 dir_norm=0
@@ -106,44 +103,46 @@ num_pos_freqs=10
 num_viewdir_freqs=4 #6
 
 random_sample='random'
-
-random_sample_size=56 #48 # 32 * 32 = 1024
+random_sample_size=56 # 32 * 32 = 1024
 
 batch_size=1
+
 plr=0.002
 lr=0.0005 # 0.0005 #0.00015
 lr_policy="iter_exponential_decay"
 lr_decay_iters=1000000
 lr_decay_exp=0.1
 
-gpu_ids='3'
-checkpoints_dir="${nrCheckpoint}/tanksntemples/"
+gpu_ids='0'
+
+checkpoints_dir="${nrCheckpoint}/scannet/"
 resume_dir="${nrCheckpoint}/init/dtu_dgt_d012_img0123_conf_agg2_32_dirclr20"
 
 save_iter_freq=10000
 save_point_freq=10000 #301840 #1
-maximum_step=200000 #300000 #800000
+maximum_step=200000 #500000 #250000 #800000
 
 niter=10000 #1000000
 niter_decay=10000 #250000
-n_threads=1
+n_threads=2
+
 train_and_test=0 #1
 test_num=10
-test_freq=10000 #1200 #1200 #30184 #30184 #50000
+test_freq=10000 #  #100 #1200 #1200 #30184 #30184 #50000
 print_freq=40
-test_num_step=3
+test_num_step=50
 
-far_thresh=0.005
-prob_freq=10001 #2000 #10001
-prob_num_step=50
+prob_freq=10000 #10001
+prob_num_step=100
+prob_kernel_size=" 3 3 3 1 1 1 "
+prob_tiers=" 40000 120000 "
+prob_mode=0 # 0, n, 1 t, 10 t&n
 prob_thresh=0.7
 prob_mul=0.4
-prob_kernel_size=" 3 3 3 "
-prob_tiers=" 130000 "
 
 zero_epsilon=1e-3
 
-visual_items=' coarse_raycolor gt_image '
+visual_items='coarse_raycolor gt_image '
 zero_one_loss_items='conf_coefficient' #regularize background to be either 0 or 1
 zero_one_loss_weights=" 0.0001 "
 sparse_loss_weight=0
@@ -152,18 +151,14 @@ color_loss_weights=" 1.0 0.0 0.0 "
 color_loss_items='ray_masked_coarse_raycolor ray_miss_coarse_raycolor coarse_raycolor'
 test_color_loss_items='coarse_raycolor ray_miss_coarse_raycolor ray_masked_coarse_raycolor'
 
-vid=600000
+
 
 bg_color="white" #"0.0,0.0,0.0,1.0,1.0,1.0"
 split="train"
 
-cd run
+cd pointnerf/run
 
-for i in $(seq 1 $prob_freq $maximum_step)
-
-do
-
-python3 train_ft.py \
+python3 gen_pnts.py \
         --experiment $name \
         --scan $scan \
         --data_root $data_root \
@@ -195,6 +190,8 @@ python3 train_ft.py \
         --test_freq $test_freq \
         --test_num_step $test_num_step \
         --test_color_loss_items $test_color_loss_items \
+        --prob_freq $prob_freq \
+        --prob_num_step $prob_num_step \
         --print_freq $print_freq \
         --bg_color $bg_color \
         --split $split \
@@ -266,26 +263,19 @@ python3 train_ft.py \
         --normview $normview \
         --prune_thresh $prune_thresh \
         --prune_iter $prune_iter \
-        --full_comb $full_comb \
         --sparse_loss_weight $sparse_loss_weight \
+        --zero_one_loss_items $zero_one_loss_items \
+        --zero_one_loss_weights $zero_one_loss_weights \
         --default_conf $default_conf \
-        --prob_freq $prob_freq \
-        --prob_num_step $prob_num_step \
+        --edge_filter $edge_filter \
+        --vsize $vsize \
+        --ranges $ranges \
+        --z_depth_dim $z_depth_dim \
+        --max_o $max_o \
         --prob_thresh $prob_thresh \
         --prob_mul $prob_mul \
         --prob_kernel_size $prob_kernel_size \
         --prob_tiers $prob_tiers \
-        --alpha_range $alpha_range \
-        --ranges $ranges \
-        --mvs_img_wh $mvs_img_wh \
-        --img_wh $img_wh \
-        --vid $vid \
-        --vsize $vsize \
-        --max_o $max_o \
-        --zero_one_loss_items $zero_one_loss_items \
-        --zero_one_loss_weights $zero_one_loss_weights \
-        --prune_max_iter $prune_max_iter \
-        --far_thresh $far_thresh \
+        --query_size $query_size \
         --debug
 
-done

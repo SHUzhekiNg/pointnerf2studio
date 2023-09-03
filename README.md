@@ -63,6 +63,10 @@ pip install git+https://github.com/SHUzhekiNg/pointnerf2studio
 2. generate neural point cloud using MVSNet with:
 
    ```sh
+   bash pointnerf/dev_scripts/w_<dataset_name>/<scene_name>_points.sh
+   ```
+   for example,
+   ```sh
    bash pointnerf/dev_scripts/w_n360/chair_points.sh
    ```
 
@@ -80,7 +84,7 @@ pip install git+https://github.com/SHUzhekiNg/pointnerf2studio
 
 ## Reference
 
-This project is referred to <strong>Point-NeRF: Point-based Neural Radiance Fields</strong>.
+This project is developed based on <strong>Point-NeRF: Point-based Neural Radiance Fields</strong>.
 
 ```
 @inproceedings{xu2022point,
